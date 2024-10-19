@@ -6,16 +6,16 @@ BEGIN
     -- Base SQL query
     v_sql := 'SELECT      ASID.SD_ID, 
                           ASID.DET_SALE_TYPE, 
-                          ASR.REG_NAME CUSTOMER_NAME,
+                          ASID.CALL_CUSTOMER_NAME CUSTOMER_NAME,
                           ASID.CALL_CUSTOMER_ID,
-                          SI.EMP_ID,
+                          ASID.CUSTOMER_EMP_ID,
                           ASID.CREATED_ON'; 
 
     -- Get the number of days in the current month
     v_last_day := TO_NUMBER(TO_CHAR(LAST_DAY(SYSDATE), 'DD'));
 
     -- Loop through each day of the current month to dynamically add a column
-    FOR i IN 1..v_last_day LOOP
+   FOR i IN 1..v_last_day LOOP
         -- Format the day as 'DD-MM-YYYY'
         v_day := TO_CHAR(TRUNC(SYSDATE, 'MM') + (i - 1), 'DD-MM-YYYY');
 
@@ -27,20 +27,21 @@ BEGIN
     v_sql := v_sql ||   'from AB_SALE_INFO_DET ASID
                           LEFT join AB_SALE_INFO SI on SI.sale_id = ASID.SALE_ID
                             LEFT JOIN AB_UM_APPLICATION_USERS UAU ON UAU.USER_ID=SI.EMP_ID
-                           LEFT JOIN  ab_setup_registration  ASR ON ASID.CALL_CUSTOMER_ID=ASR.SR_ID
+                           LEFT JOIN  ab_setup_registration  ASR ON ASID.CUSTOMER_ID=ASR.SR_ID
                           LEFT JOIN AB_UM_APP_USER_ORG ORG ON ORG.USER_ID = UAU.USER_ID
+                         
 
 
 
 
-                     
+                     --WHERE ASID.DET_SALE_TYPE = ''CUSTOMER ASSIGN DET''
                       WHERE ASID.DET_SALE_TYPE = ''CALL CUSTOMER''
                       
-                     -- AND  UAU.USER_ID E=nvl(:P140_SALE_OFFICER,null)
+                     AND   ASID.CUSTOMER_EMP_ID=nvl(:P140_SALE_OFFICER,null)
                         GROUP BY ASID.SD_ID, 
                           ASID.DET_SALE_TYPE, 
-                          SI.EMP_ID,
-                         ASR.REG_NAME , 
+                          ASID.CALL_CUSTOMER_NAME,
+                          ASID.CUSTOMER_EMP_ID,
                           ASID.CALL_CUSTOMER_ID,
                           ASID.CREATED_ON
                         ORDER BY ASID.CREATED_ON';
