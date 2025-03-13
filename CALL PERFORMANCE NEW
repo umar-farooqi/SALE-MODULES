@@ -1,0 +1,59 @@
+DECLARE
+    v_sql      CLOB;
+    v_day      VARCHAR2(10);
+    v_last_day NUMBER;    
+BEGIN
+    v_sql := 'SELECT ASID.SD_ID, 
+                     ASID.DET_SALE_TYPE, 
+                     ASR.REG_NAME CUSTOMER_NAME,
+                     ASID.REMARKS,
+                     ASR.CONTACT_NUMBER,
+                     ASID.CREATED_ON,
+                     ASID.CREATED_BY,
+                     ASID.UPDATED_ON';
+
+    v_last_day := TO_NUMBER(TO_CHAR(LAST_DAY(SYSDATE), 'DD'));
+
+    FOR i IN 1..v_last_day LOOP
+        v_day := TO_CHAR(TRUNC(SYSDATE, 'MM') + (i - 1), 'DD-MM-YYYY');
+
+                        v_sql := v_sql || ', COALESCE(MAX( CASE 
+                           WHEN 
+                          TO_CHAR(ASID.CREATED_ON, ''DD-MM-YYYY'') = ''' || v_day || '''  OR 
+                          TO_CHAR(ASID.UPDATED_ON, ''DD-MM-YYYY'') = ''' || v_day || ''' 
+                           THEN ''<i class="fa fa-check-square" style="color:green;"></i>''
+                           END), '''') AS "' || v_day || '"';
+                                    
+
+        -- v_sql := v_sql || ',CASE 
+        --                     WHEN TO_CHAR(ASID.CREATED_ON, ''DD-MM-YYYY'') = ''' || v_day || ''' 
+        --                     OR TO_CHAR(ASID.UPDATED_ON, ''DD-MM-YYYY'') = ''' || v_day || ''' 
+        --                     THEN ''<i class="fa fa-check-square" style="color:green;"></i>'' 
+        --                     ELSE NULL END AS "' || v_day || '"';
+    END LOOP;
+
+    v_sql := v_sql || ' FROM AB_SALE_INFO_DET ASID
+                        LEFT JOIN AB_SALE_INFO SI ON SI.SALE_ID = ASID.SALE_ID
+                        LEFT JOIN AB_UM_APPLICATION_USERS UAU ON UAU.USER_ID = SI.EMP_ID
+                        LEFT JOIN AB_SETUP_REGISTRATION ASR ON ASID.CUSTOMER_ID = ASR.SR_ID
+                        LEFT JOIN AB_UM_APP_USER_ORG ORG ON ORG.USER_ID = UAU.USER_ID
+                        WHERE ASID.DET_SALE_TYPE = ''CUSTOMER ASSIGN DET''
+                          AND UAU.USER_ID = NVL(:P140_SALE_OFFICER,UAU.USER_ID )
+                          AND ASID.STATUS = ''Y'' 
+                       --   AND ASID.REMARKS IS NOT NULL
+                          AND ASID.ORG_ID = :GV_ORG_ID
+                        GROUP BY ASID.SD_ID, 
+                                 ASID.DET_SALE_TYPE, 
+                                 ASR.REG_NAME,
+                                 ASID.REMARKS,
+                                 ASR.CONTACT_NUMBER,
+                                 ASID.CREATED_ON,
+                                 ASID.CREATED_BY,
+                                 ASID.UPDATED_ON,
+                                 ASID.CUSTOMER_ID
+                        ORDER BY ASID.CREATED_ON';
+
+    --DBMS_OUTPUT.PUT_LINE(v_sql);
+    RETURN v_sql;
+END;
+
