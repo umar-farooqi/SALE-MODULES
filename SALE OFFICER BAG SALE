@@ -28,7 +28,7 @@ BEGIN
     END LOOP;
 
     -- Constructing the rest of the query
-    v_sql := v_sql || ' 
+    v_sql := v_sql || '
         FROM AB_SO_ORDER_HEAD SO
         left JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
         LEFT JOIN (SELECT DISTINCT DET_ID FROM AB_LOOKUP_DETAIL) LD  
