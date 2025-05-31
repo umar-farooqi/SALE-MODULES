@@ -1,0 +1,107 @@
+-- DECLARE
+--     v_sql         CLOB;
+--     v_day         VARCHAR2(20);
+--     v_last_day    NUMBER;
+--     v_month       VARCHAR2(2);
+--     v_year        VARCHAR2(4);
+--     v_first_date  DATE;
+-- BEGIN
+--     -- Get selected month or default to current month
+--     v_month := NVL(:P498_MONTH_V1, TO_CHAR(SYSDATE, 'MM'));  -- The month input from LOV (e.g. '03' for March)
+--     v_year  := TO_CHAR(SYSDATE, 'YYYY');  -- Default to the current year
+
+--     -- Calculate first date of the month and last day of the month
+--     v_first_date := TO_DATE('01-' || v_month || '-' || v_year, 'DD-MM-YYYY');
+--     v_last_day   := TO_NUMBER(TO_CHAR(LAST_DAY(v_first_date), 'DD'));  -- Get the last day of the month
+
+--     -- Initialize the CLOB for SQL
+--     DBMS_LOB.CREATETEMPORARY(v_sql, TRUE);
+    
+--     -- Start the SQL query
+--     DBMS_LOB.APPEND(v_sql, 'SELECT 
+--         UM.USER_NAME AS SALE_OFFICER,
+--         SUM(SOD.NO_BAGS) AS TOTAL_BAGS');
+
+--     -- Loop to generate dynamic columns for each day up to the last valid day of the selected month
+--     FOR i IN 1 .. v_last_day LOOP
+--         -- Use Day1, Day2, ..., DayN (depending on the month)
+--         v_day := 'Day' || TO_CHAR(i);  -- Alias for each day (Day1, Day2, etc.)
+
+--         -- Build the pivot columns for each day
+--         DBMS_LOB.APPEND(v_sql, ' ,
+--             SUM(CASE 
+--                     WHEN TRUNC(SO.ORDER_DATE) = TO_DATE(''' || TO_CHAR(v_first_date + (i - 1), 'DD-Mon-YYYY') || ''', ''DD-Mon-YYYY'') 
+--                     THEN SOD.NO_BAGS
+--                     ELSE 0
+--                 END) AS "Day' || TO_CHAR(i) || '"');  -- Proper alias for Day1, Day2, etc.
+--     END LOOP;
+
+--     -- Finish the SQL with FROM, WHERE, and GROUP BY
+--     DBMS_LOB.APPEND(v_sql, '
+--         FROM AB_SO_ORDER_HEAD SO
+--         LEFT JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
+--         LEFT JOIN AB_UM_APPLICATION_USERS UM ON UM.USER_ID = SO.SALE_OFFER_ID
+--         WHERE SO.SO_TYPE = ''SALE ORDER''
+--           AND SO.ORG_ID = :GV_ORG_ID
+--           AND SO.STATUS = ''Y''
+--           AND SOD.STATUS = ''Y''
+--           AND TO_CHAR(SO.ORDER_DATE, ''MM'') = ''' || v_month || '''
+--           AND UM.USER_ID = NVL(:P498_SALE_OFFICER, UM.USER_ID)
+--         GROUP BY UM.USER_NAME');
+
+--     -- Return the final dynamic SQL
+--     RETURN v_sql;
+-- END;
+
+
+DECLARE
+    v_sql         CLOB;
+    v_day         VARCHAR2(20);
+    v_last_day    NUMBER;
+    v_month       VARCHAR2(2);
+    v_year        VARCHAR2(4);
+    v_first_date  DATE;
+    v_last_date   DATE;
+BEGIN
+    -- Get selected month or default to current month
+    v_month := NVL(:P498_MONTH_V1, TO_CHAR(SYSDATE, 'MM'));
+    v_year  := TO_CHAR(SYSDATE, 'YYYY');
+
+    v_first_date := TO_DATE('01-' || v_month || '-' || v_year, 'DD-MM-YYYY');
+    v_last_date  := LAST_DAY(v_first_date);
+    v_last_day   := TO_NUMBER(TO_CHAR(v_last_date, 'DD'));
+
+    DBMS_LOB.CREATETEMPORARY(v_sql, TRUE);
+
+    DBMS_LOB.APPEND(v_sql, 'SELECT 
+        UM.USER_NAME AS SALE_OFFICER,
+        SUM(SOD.NO_BAGS) AS TOTAL_BAGS');
+
+    -- Loop always from 1 to 31 to avoid "invalid identifier" error
+    FOR i IN 1 .. 31 LOOP
+        v_day := TO_CHAR(i, 'FM00');  -- Ensure 2-digit day format
+
+        DBMS_LOB.APPEND(v_sql, ' ,
+            SUM(CASE 
+                    WHEN TO_CHAR(SO.ORDER_DATE, ''DD-MM-YYYY'') = ''' || 
+                        LPAD(i, 2, '0') || '-' || v_month || '-' || v_year || ''' 
+                    THEN SOD.NO_BAGS 
+                    ELSE NULL
+                END) AS "Day' || i || '"');
+    END LOOP;
+
+    DBMS_LOB.APPEND(v_sql, '
+        FROM AB_SO_ORDER_HEAD SO
+        LEFT JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
+        LEFT JOIN AB_UM_APPLICATION_USERS UM ON UM.USER_ID = SO.SALE_OFFER_ID
+        WHERE SO.SO_TYPE = ''SALE ORDER''
+          AND SO.ORG_ID = :GV_ORG_ID
+          AND SO.STATUS = ''Y''
+          AND SOD.STATUS = ''Y''
+          AND SO.ORDER_DATE BETWEEN TO_DATE(''' || TO_CHAR(v_first_date, 'DD-MON-YYYY') || ''', ''DD-MON-YYYY'') 
+                               AND TO_DATE(''' || TO_CHAR(v_last_date, 'DD-MON-YYYY') || ''', ''DD-MON-YYYY'')
+      --    AND UM.USER_ID = NVL(:P498_SALE_OFFICER, UM.USER_ID)
+        GROUP BY UM.USER_NAME');
+
+    RETURN v_sql;
+END;

@@ -1,0 +1,346 @@
+--  this query without total 
+-- DECLARE
+--     v_day         VARCHAR2(20);
+--     v_last_day    NUMBER;
+--     v_month       VARCHAR2(2);
+--     v_year        VARCHAR2(4);
+--     v_first_date  DATE;
+--     v_last_date   DATE;
+--     v_header_html VARCHAR2(32767);
+-- BEGIN
+--     -- Determine the month/year to report
+--     v_month := NVL(:P498_MONTH_V1, TO_CHAR(SYSDATE, 'MM'));
+--     v_year  := TO_CHAR(SYSDATE, 'YYYY');
+
+--     v_first_date := TO_DATE('01-' || v_month || '-' || v_year, 'DD-MM-YYYY');
+--     v_last_date  := LAST_DAY(v_first_date);
+--     v_last_day   := TO_NUMBER(TO_CHAR(v_last_date, 'DD'));
+
+--     -- HTML Header with styles and script
+--     htp.p('<html>
+--     <head>
+--     <style>
+--         table, th, td { border: 1px solid black; border-collapse: collapse; padding: 4px; font-size: 13px; }
+--         th { background-color: #f2f2f2; }
+--     </style>
+--     <script>
+--         function adjustColumnWidth() {
+--           var table = document.querySelector("table");
+--           var itemNameColumnIndex = 1; // Index for ITEM NAME column
+--           var maxWidth = 0;
+--           var rows = table.querySelectorAll("tbody tr");
+          
+--           rows.forEach(function(row) {
+--             var itemNameCell = row.cells[itemNameColumnIndex];
+--             if (itemNameCell) {
+--               var cellWidth = itemNameCell.scrollWidth;
+--               if (cellWidth > maxWidth) {
+--                 maxWidth = cellWidth;
+--               }
+--             }
+--           });
+          
+--           var header = table.querySelector("thead th.item-name-column");
+--           if (header) {
+--             header.style.width = maxWidth + "px";
+--           }
+          
+--           var dataCells = table.querySelectorAll("tbody td.item-name-column");
+--           dataCells.forEach(function(cell) {
+--             cell.style.width = maxWidth + "px";
+--           });
+--         }
+       
+--         function printDiv(printpage) {
+--           adjustColumnWidth();
+--           var headstr = "<html><head><title></title><style>";
+--           headstr += "@page { size: A4 landscape; margin: 10mm; }";
+--           headstr += "body { margin: 0; padding: 0; font-family: Arial, sans-serif; }";
+--           headstr += ".button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }";
+--           headstr += ".button1 { font-size: 16px; }";
+--           headstr += "table { border-collapse: collapse; width: 100%; margin: 0; padding: 0; }";
+--           headstr += "th, td { border: 1px solid black; text-align: left; padding: 3px; font-size: 10px; line-height: 1.1; }";
+      
+--           headstr += "th { background-color: rgba(146, 208, 80, 0.237); -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+--           headstr += ".separator { border-top: 1px solid black; }";
+--           headstr += "h3 { margin: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(146, 208, 80); border: 1px solid black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+--           headstr += "@media print { thead {display: table-header-group;} tfoot {display: table-footer-group;} }";
+--           headstr += "h2 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 0; text-align: center; }";
+--           headstr += "#div_print1 { margin: 0; padding: 0; }";
+--           headstr += "</style></head><body>";
+--           var footstr = "</body></html>";
+--           var newstr = document.getElementById(printpage).innerHTML;
+--           var oldstr = document.body.innerHTML;
+--           document.body.innerHTML = headstr + newstr + footstr;
+--           window.print();
+--           document.body.innerHTML = oldstr;
+--           return false;
+--         }
+--       </script>
+--     </head>
+--     <body>');
+
+--       htp.p('<button class="button" onclick="printDiv(''all_reports'')">Print Reports</button>');
+
+--   -- Start merged report container
+--         htp.p('<div id="all_reports">');
+
+--     htp.p('<div class="header" style="display: flex; justify-content: space-between; margin-bottom: 20px; ">');
+--     htp.p('<h2>AKBAR BROTHERS</h2>');
+--     htp.p('<img style="height: 100%" src="#APP_FILES#icons/Akbar Brothers logo.jpg" alt="">');
+--     htp.p('</div>');
+--     htp.p('<center><h3>Sales Officer Monthly Bags Report - ' || TO_CHAR(v_first_date, 'Month YYYY') || '</h3></center>');
+
+--     -- Table with dynamic header
+--     v_header_html := '<table><thead><tr><th>SALE OFFICER</th><th>TOTAL BAGS</th>';
+--     FOR i IN 1 .. v_last_day LOOP
+--         v_day := TO_CHAR(v_first_date + (i - 1), 'DD-MON');
+--         v_header_html := v_header_html || '<th>' || v_day || '</th>';
+--     END LOOP;
+--     v_header_html := v_header_html || '</tr></thead><tbody>';
+--     htp.p(v_header_html);
+
+--     -- Data rows (replace with query logic)
+--     FOR r IN (
+--         SELECT 
+--             UM.USER_NAME AS SALE_OFFICER,
+--             SUM(SOD.NO_BAGS) AS TOTAL_BAGS,
+--             UM.USER_ID
+--         FROM AB_SO_ORDER_HEAD SO
+--         LEFT JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
+--         LEFT JOIN AB_UM_APPLICATION_USERS UM ON UM.USER_ID = SO.SALE_OFFER_ID
+--         WHERE SO.SO_TYPE = 'SALE ORDER'
+--           AND SO.ORG_ID = :GV_ORG_ID
+--           AND SO.STATUS = 'Y'
+--           AND SOD.STATUS = 'Y'
+--           AND SO.ORDER_DATE BETWEEN v_first_date AND v_last_date
+--         GROUP BY UM.USER_NAME, UM.USER_ID
+--     ) LOOP
+--         htp.p('<tr>');
+--         htp.p('<td>' || r.SALE_OFFICER || '</td>');
+--         htp.p('<td>' || r.TOTAL_BAGS || '</td>');
+
+--         -- Loop each day of month
+--         FOR i IN 1 .. v_last_day LOOP
+--             DECLARE
+--                 v_day_date DATE := v_first_date + (i - 1);
+--                 v_bags NUMBER := 0;
+--             BEGIN
+--                 SELECT NVL(SUM(SOD.NO_BAGS), 0)
+--                 INTO v_bags
+--                 FROM AB_SO_ORDER_HEAD SO
+--                 JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
+--                 WHERE SO.SO_TYPE = 'SALE ORDER'
+--                   AND SO.ORG_ID = :GV_ORG_ID
+--                   AND SO.STATUS = 'Y'
+--                   AND SOD.STATUS = 'Y'
+--                   AND TRUNC(SO.ORDER_DATE) = v_day_date
+--                   AND SO.SALE_OFFER_ID = r.USER_ID;
+
+--                 IF v_bags > 0 THEN
+--                     htp.p('<td>' || v_bags || '</td>');
+--                 ELSE
+--                     htp.p('<td></td>');
+--                 END IF;
+--             EXCEPTION
+--                 WHEN OTHERS THEN
+--                     htp.p('<td></td>');
+--             END;
+--         END LOOP;
+
+--         htp.p('</tr>');
+--     END LOOP;
+
+--     htp.p('</tbody></table>');
+--     htp.p('</div></body></html>');
+-- END;
+
+
+
+
+
+
+-------------------------
+DECLARE
+    v_day         VARCHAR2(20);
+    v_last_day    NUMBER;
+    v_month       VARCHAR2(2);
+    v_year        VARCHAR2(4);
+    v_first_date  DATE;
+    v_last_date   DATE;
+    v_header_html VARCHAR2(32767);
+    v_footer_html VARCHAR2(32767);
+    v_col_total   SYS.ODCINUMBERLIST := SYS.ODCINUMBERLIST(); -- Array to hold totals per day
+    v_total_bags  NUMBER := 0; -- Total of all TOTAL_BAGS column
+BEGIN
+    -- Determine the month/year to report
+    v_month := NVL(:P498_MONTH_V1, TO_CHAR(SYSDATE, 'MM'));
+    v_year  := TO_CHAR(SYSDATE, 'YYYY');
+
+    v_first_date := TO_DATE('01-' || v_month || '-' || v_year, 'DD-MM-YYYY');
+    v_last_date  := LAST_DAY(v_first_date);
+    v_last_day   := TO_NUMBER(TO_CHAR(v_last_date, 'DD'));
+
+    -- Initialize column totals
+    FOR i IN 1 .. v_last_day LOOP
+        v_col_total.EXTEND;
+        v_col_total(i) := 0;
+    END LOOP;
+
+   -- HTML start
+     htp.p('<html>
+    <head>
+    <style>
+        table, th, td { border: 1px solid black; border-collapse: collapse; padding: 4px; font-size: 13px; }
+        th { background-color: #f2f2f2; }
+    </style>
+    <script>
+        function adjustColumnWidth() {
+          var table = document.querySelector("table");
+          var itemNameColumnIndex = 1; // Index for ITEM NAME column
+          var maxWidth = 0;
+          var rows = table.querySelectorAll("tbody tr");
+          
+          rows.forEach(function(row) {
+            var itemNameCell = row.cells[itemNameColumnIndex];
+            if (itemNameCell) {
+              var cellWidth = itemNameCell.scrollWidth;
+              if (cellWidth > maxWidth) {
+                maxWidth = cellWidth;
+              }
+            }
+          });
+          
+          var header = table.querySelector("thead th.item-name-column");
+          if (header) {
+            header.style.width = maxWidth + "px";
+          }
+          
+          var dataCells = table.querySelectorAll("tbody td.item-name-column");
+          dataCells.forEach(function(cell) {
+            cell.style.width = maxWidth + "px";
+          });
+        }
+       
+        function printDiv(printpage) {
+          adjustColumnWidth();
+          var headstr = "<html><head><title></title><style>";
+          headstr += "@page { size: A4 landscape; margin: 10mm; }";
+          headstr += "body { margin: 0; padding: 0; font-family: Arial, sans-serif; }";
+          headstr += ".button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }";
+          headstr += ".button1 { font-size: 16px; }";
+          headstr += "table { border-collapse: collapse; width: 100%; margin: 0; padding: 0; }";
+          headstr += "th, td { border: 1px solid black; text-align: left; padding: 3px; font-size: 14px; line-height: 1.1; }";
+      
+          headstr += "th { background-color: rgba(146, 208, 80, 0.237); -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += ".separator { border-top: 1px solid black; }";
+          headstr += "h3 { margin: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(146, 208, 80); border: 1px solid black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += "@media print { thead {display: table-header-group;} tfoot {display: table-footer-group;} }";
+          headstr += "h2 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 0; text-align: center; }";
+          headstr += "#div_print1 { margin: 0; padding: 0; }";
+          headstr += "</style></head><body>";
+          var footstr = "</body></html>";
+          var newstr = document.getElementById(printpage).innerHTML;
+          var oldstr = document.body.innerHTML;
+          document.body.innerHTML = headstr + newstr + footstr;
+          window.print();
+          document.body.innerHTML = oldstr;
+          return false;
+        }
+      </script>
+    </head>
+    <body>');
+
+      htp.p('<button class="button" onclick="printDiv(''all_reports'')">Print Reports</button>');
+
+  -- Start merged report container
+        htp.p('<div id="all_reports">');
+
+            htp.p('<div class="header" style="display: flex; justify-content: space-between; margin-bottom: 20px; ">');
+    htp.p('<h2>AKBAR BROTHERS</h2>');
+    htp.p('<img style="height: 100%" src="#APP_FILES#icons/Akbar Brothers logo.jpg" alt="">');
+    htp.p('</div>');
+
+   htp.p('<div style="text-align: center;"><h3>Sales Officer Monthly Bags Report - ' || TO_CHAR(v_first_date, 'Month YYYY') || '</h3></div>');
+
+    -- Table header
+    v_header_html := '<table><thead><tr><th>SALE OFFICER</th><th>TOTAL BAGS</th>';
+    FOR i IN 1 .. v_last_day LOOP
+        v_day := TO_CHAR(v_first_date + (i - 1), 'DD-MON');
+        v_header_html := v_header_html || '<th>' || v_day || '</th>';
+    END LOOP;
+    v_header_html := v_header_html || '</tr></thead><tbody>';
+    htp.p(v_header_html);
+
+    -- Data rows
+    FOR r IN (
+        SELECT 
+            UM.USER_NAME AS SALE_OFFICER,
+            SUM(SOD.NO_BAGS) AS TOTAL_BAGS,
+            UM.USER_ID
+        FROM AB_SO_ORDER_HEAD SO
+        LEFT JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
+        LEFT JOIN AB_UM_APPLICATION_USERS UM ON UM.USER_ID = SO.SALE_OFFER_ID
+        WHERE SO.SO_TYPE = 'SALE ORDER'
+          AND SO.ORG_ID = :GV_ORG_ID
+          AND SO.STATUS = 'Y'
+          AND SOD.STATUS = 'Y'
+          AND SO.ORDER_DATE BETWEEN v_first_date AND v_last_date
+        GROUP BY UM.USER_NAME, UM.USER_ID
+    ) LOOP
+        htp.p('<tr>');
+        htp.p('<td>' || r.SALE_OFFICER || '</td>');
+        htp.p('<td>' || r.TOTAL_BAGS || '</td>');
+
+        -- Add to grand total
+        v_total_bags := v_total_bags + r.TOTAL_BAGS;
+
+        -- Daily data
+        FOR i IN 1 .. v_last_day LOOP
+            DECLARE
+                v_day_date DATE := v_first_date + (i - 1);
+                v_bags NUMBER := 0;
+            BEGIN
+                SELECT NVL(SUM(SOD.NO_BAGS), 0)
+                INTO v_bags
+                FROM AB_SO_ORDER_HEAD SO
+                JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
+                WHERE SO.SO_TYPE = 'SALE ORDER'
+                  AND SO.ORG_ID = :GV_ORG_ID
+                  AND SO.STATUS = 'Y'
+                  AND SOD.STATUS = 'Y'
+                  AND TRUNC(SO.ORDER_DATE) = v_day_date
+                  AND SO.SALE_OFFER_ID = r.USER_ID;
+
+                -- Add to column total
+                v_col_total(i) := v_col_total(i) + v_bags;
+
+                -- Print cell
+                IF v_bags > 0 THEN
+                    htp.p('<td>' || v_bags || '</td>');
+                ELSE
+                    htp.p('<td></td>');
+                END IF;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    htp.p('<td></td>');
+            END;
+        END LOOP;
+        htp.p('</tr>');
+    END LOOP;
+
+    -- Footer row with totals
+    v_footer_html := '<tr><td><b>Grand Total:</b></td><td><b>' || v_total_bags || '</b></td>';
+    FOR i IN 1 .. v_last_day LOOP
+        IF v_col_total(i) > 0 THEN
+            v_footer_html := v_footer_html || '<td><b>' || v_col_total(i) || '</b></td>';
+        ELSE
+            v_footer_html := v_footer_html || '<td></td>';
+        END IF;
+    END LOOP;
+    v_footer_html := v_footer_html || '</tr>';
+    htp.p(v_footer_html);
+
+    -- Close tags
+    htp.p('</tbody></table></body></html>');
+END;

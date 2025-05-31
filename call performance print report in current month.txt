@@ -1,0 +1,335 @@
+-- DECLARE
+--     v_day         VARCHAR2(20);
+--     v_last_day    NUMBER;
+--     v_header_html VARCHAR2(32767);
+--     v_html        VARCHAR2(32767);
+
+-- BEGIN
+--     -- HTML HEADER
+--     htp.p('<html>
+--     <head>
+--     <style>
+--         table, th, td { border: 1px solid black; border-collapse: collapse; padding: 4px; font-size: 13px; }
+--         th { background-color: #f2f2f2; }
+--     </style>
+--     <script>
+--         function adjustColumnWidth() {
+--           var table = document.querySelector("table");
+--           var itemNameColumnIndex = 1; // Index for ITEM NAME column
+--           var maxWidth = 0;
+--           var rows = table.querySelectorAll("tbody tr");
+          
+--           rows.forEach(function(row) {
+--             var itemNameCell = row.cells[itemNameColumnIndex];
+--             if (itemNameCell) {
+--               var cellWidth = itemNameCell.scrollWidth;
+--               if (cellWidth > maxWidth) {
+--                 maxWidth = cellWidth;
+--               }
+--             }
+--           });
+          
+--           var header = table.querySelector("thead th.item-name-column");
+--           if (header) {
+--             header.style.width = maxWidth + "px";
+--           }
+          
+--           var dataCells = table.querySelectorAll("tbody td.item-name-column");
+--           dataCells.forEach(function(cell) {
+--             cell.style.width = maxWidth + "px";
+--           });
+--         }
+       
+--         function printDiv(printpage) {
+--           adjustColumnWidth();
+--           var headstr = "<html><head><title></title><style>";
+--           headstr += "@page { size: A4 landscape; margin: 10mm; }";
+--           headstr += "body { margin: 0; padding: 0; font-family: Arial, sans-serif; }";
+--           headstr += ".button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }";
+--           headstr += ".button1 { font-size: 16px; }";
+--           headstr += "table { border-collapse: collapse; width: 100%; margin: 0; padding: 0; }";
+--           headstr += "th, td { text-align: left; padding: 3px; font-size: 10px; line-height: 1.1; }";
+--           headstr += "th { background-color: rgba(146, 208, 80, 0.237); -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+--           headstr += ".separator { border-top: 1px solid black; }";
+--           headstr += "h3 { margin: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(146, 208, 80); border: 1px solid black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+--           headstr += "@media print { thead {display: table-header-group;} tfoot {display: table-footer-group;} }";
+--           headstr += "h2 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 0; text-align: center; }";
+--           headstr += "#div_print1 { margin: 0; padding: 0; }";
+--           headstr += "</style></head><body>";
+--           var footstr = "</body></html>";
+--           var newstr = document.getElementById(printpage).innerHTML;
+--           var oldstr = document.body.innerHTML;
+--           document.body.innerHTML = headstr + newstr + footstr;
+--           window.print();
+--           document.body.innerHTML = oldstr;
+--           return false;
+--         }
+--       </script>
+--     </head>
+--     <body>');
+
+--       htp.p('<button class="button" onclick="printDiv(''all_reports'')">Print Reports</button>');
+
+--   -- Start merged report container
+--         htp.p('<div id="all_reports">');
+
+--     htp.p('<table border="1" width="100%">');
+
+--     htp.p('<div class="header" style="display: flex; justify-content: space-between; margin-bottom: 20px; ">');
+--     htp.p('<h2>AKBAR BROTHERS</h2>');
+--     htp.p('<img style="height: 100%" src="#APP_FILES#icons/Akbar Brothers logo.jpg" alt="">');
+--     htp.p('</div>');
+--     htp.p('<center><h3>Sales Officer Calls Report</h3></center>');
+    
+--     -- TABLE HEADERS
+--     v_last_day := TO_NUMBER(TO_CHAR(LAST_DAY(SYSDATE), 'DD'));
+
+--     v_header_html := '<tr><th>SALE OFFICER</th><th>TOTAL CALLS</th>';
+--     FOR i IN 1..v_last_day LOOP
+--         v_day := TO_CHAR(TRUNC(SYSDATE, 'MM') + (i - 1), 'DD-MM');
+--         v_header_html := v_header_html || '<th>' || v_day || '</th>';
+--     END LOOP;
+--     v_header_html := v_header_html || '</tr>';
+--     htp.p(v_header_html);
+
+--     -- TABLE DATA ROWS (Fetch real data)
+--     FOR r IN (
+--         SELECT 
+--             UAU.USER_NAME AS SALE_OFFICER,
+--             SUM(
+--                 CASE 
+--                     WHEN TRUNC(ASID.CREATED_ON) >= TRUNC(SYSDATE, 'MM') 
+--                       OR TRUNC(ASID.UPDATED_ON) >= TRUNC(SYSDATE, 'MM') 
+--                     THEN 1 
+--                     ELSE 0
+--                 END
+--             ) AS TOTAL_CALLS,
+--             MAX(UAU.USER_ID) AS USER_ID
+--         FROM AB_UM_APPLICATION_USERS UAU
+--         LEFT JOIN AB_SALE_INFO SI ON SI.EMP_ID = UAU.USER_ID
+--         LEFT JOIN AB_SALE_INFO_DET ASID 
+--                ON ASID.SALE_ID = SI.SALE_ID
+--               AND ASID.DET_SALE_TYPE = 'CUSTOMER ASSIGN DET'
+--               AND ASID.CALL_STATUS IN ('OUTGOING CALL')
+--         LEFT JOIN AB_UM_APP_USER_ORG ORG ON ORG.USER_ID = UAU.USER_ID
+--         WHERE UAU.STATUS = 'Y'
+--           AND UAU.USER_ID IN (124, 119, 73, 74, 75, 76, 77, 78, 79, 80, 81, 84, 116, 85, 98, 117, 107, 118, 121, 120)
+--           AND ORG.ORG_ID = :GV_ORG_ID
+--         GROUP BY UAU.USER_NAME
+--     ) LOOP
+--         htp.p('<tr>');
+--         htp.p('<td>' || r.SALE_OFFICER || '</td>');
+--         htp.p('<td>' || r.TOTAL_CALLS || '</td>');
+
+--         -- Day-wise data
+--         FOR i IN 1..v_last_day LOOP
+--             v_day := TO_CHAR(TRUNC(SYSDATE, 'MM') + (i - 1), 'DD-MM-YYYY');
+--             DECLARE
+--                 v_count NUMBER := 0;
+--             BEGIN
+--                 SELECT COUNT(*) INTO v_count
+--                 FROM AB_SALE_INFO_DET ASID
+--                 JOIN AB_SALE_INFO SI ON SI.SALE_ID = ASID.SALE_ID
+--                 WHERE SI.EMP_ID = r.USER_ID
+--                   AND ASID.DET_SALE_TYPE = 'CUSTOMER ASSIGN DET'
+--                   AND ASID.CALL_STATUS IN ('OUTGOING CALL')
+--                   AND (TO_CHAR(ASID.CREATED_ON, 'DD-MM-YYYY') = v_day OR TO_CHAR(ASID.UPDATED_ON, 'DD-MM-YYYY') = v_day);
+                
+--                 IF v_count = 0 THEN
+--                     htp.p('<td></td>');
+--                 ELSE
+--                     htp.p('<td>' || v_count || '</td>');
+--                 END IF;
+--             EXCEPTION
+--                 WHEN OTHERS THEN
+--                     htp.p('<td></td>');
+--             END;
+--         END LOOP;
+
+--         htp.p('</tr>');
+--     END LOOP;
+
+--     htp.p('</table></body></html>');
+-- END;
+------------------------------------------------------------------------
+DECLARE
+    v_day         VARCHAR2(20);
+    v_last_day    NUMBER;
+    v_header_html VARCHAR2(32767);
+    v_html        VARCHAR2(32767);
+
+    -- Variables to hold totals
+    v_total_calls_sum NUMBER := 0;
+    TYPE t_day_sum IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+    v_day_sums t_day_sum;
+BEGIN
+    -- Initialize day sums to 0
+    v_last_day := TO_NUMBER(TO_CHAR(LAST_DAY(SYSDATE), 'DD'));
+    FOR i IN 1..v_last_day LOOP
+        v_day_sums(i) := 0;
+    END LOOP;
+
+    -- HTML HEADER
+    htp.p('<html>
+    <head>
+    <style>
+        table, th, td { border: 1px solid black; border-collapse: collapse; padding: 4px; font-size: 13px; }
+        th { background-color: #f2f2f2; }
+    </style>
+    <script>
+        function adjustColumnWidth() {
+          var table = document.querySelector("table");
+          var itemNameColumnIndex = 1; // Index for ITEM NAME column
+          var maxWidth = 0;
+          var rows = table.querySelectorAll("tbody tr");
+          
+          rows.forEach(function(row) {
+            var itemNameCell = row.cells[itemNameColumnIndex];
+            if (itemNameCell) {
+              var cellWidth = itemNameCell.scrollWidth;
+              if (cellWidth > maxWidth) {
+                maxWidth = cellWidth;
+              }
+            }
+          });
+          
+          var header = table.querySelector("thead th.item-name-column");
+          if (header) {
+            header.style.width = maxWidth + "px";
+          }
+          
+          var dataCells = table.querySelectorAll("tbody td.item-name-column");
+          dataCells.forEach(function(cell) {
+            cell.style.width = maxWidth + "px";
+          });
+        }
+       
+        function printDiv(printpage) {
+          adjustColumnWidth();
+          var headstr = "<html><head><title></title><style>";
+          headstr += "@page { size: A4 landscape; margin: 10mm; }";
+          headstr += "body { margin: 0; padding: 0; font-family: Arial, sans-serif; }";
+          headstr += ".button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }";
+          headstr += ".button1 { font-size: 16px; }";
+          headstr += "table { border-collapse: collapse; width: 100%; margin: 0; padding: 0; }";
+          headstr += "th, td { text-align: left; padding: 3px; font-size: 10px; line-height: 1.1; }";
+          headstr += "th { background-color: rgba(146, 208, 80, 0.237); -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += ".separator { border-top: 1px solid black; }";
+          headstr += "h3 { margin: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(146, 208, 80); border: 1px solid black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += "@media print { thead {display: table-header-group;} tfoot {display: table-footer-group;} }";
+          headstr += "h2 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 0; text-align: center; }";
+          headstr += "#div_print1 { margin: 0; padding: 0; }";
+          headstr += "</style></head><body>";
+          var footstr = "</body></html>";
+          var newstr = document.getElementById(printpage).innerHTML;
+          var oldstr = document.body.innerHTML;
+          document.body.innerHTML = headstr + newstr + footstr;
+          window.print();
+          document.body.innerHTML = oldstr;
+          return false;
+        }
+      </script>
+    </head>
+    <body>');
+
+    htp.p('<button class="button" onclick="printDiv(''all_reports'')">Print Reports</button>');
+
+    -- Start merged report container
+    htp.p('<div id="all_reports">');
+
+    htp.p('<table border="1" width="100%">');
+
+    htp.p('<div class="header" style="display: flex; justify-content: space-between; margin-bottom: 20px; ">');
+    htp.p('<h2>AKBAR BROTHERS</h2>');
+    htp.p('<img style="height: 100%" src="#APP_FILES#icons/Akbar Brothers logo.jpg" alt="">');
+    htp.p('</div>');
+    htp.p('<center><h3>Sales Officer Calls Report</h3></center>');
+
+    -- TABLE HEADERS
+    v_header_html := '<tr><th>SALE OFFICER</th><th>TOTAL CALLS</th>';
+    FOR i IN 1..v_last_day LOOP
+        v_day := TO_CHAR(TRUNC(SYSDATE, 'MM') + (i - 1), 'DD-MM');
+        v_header_html := v_header_html || '<th>' || v_day || '</th>';
+    END LOOP;
+    v_header_html := v_header_html || '</tr>';
+    htp.p(v_header_html);
+
+    -- TABLE DATA ROWS (Fetch real data)
+    FOR r IN (
+        SELECT 
+            UAU.USER_NAME AS SALE_OFFICER,
+            SUM(
+                CASE 
+                    WHEN TRUNC(ASID.CREATED_ON) >= TRUNC(SYSDATE, 'MM') 
+                      OR TRUNC(ASID.UPDATED_ON) >= TRUNC(SYSDATE, 'MM') 
+                    THEN 1 
+                    ELSE 0
+                END
+            ) AS TOTAL_CALLS,
+            MAX(UAU.USER_ID) AS USER_ID
+        FROM AB_UM_APPLICATION_USERS UAU
+        LEFT JOIN AB_SALE_INFO SI ON SI.EMP_ID = UAU.USER_ID
+        LEFT JOIN AB_SALE_INFO_DET ASID 
+               ON ASID.SALE_ID = SI.SALE_ID
+              AND ASID.DET_SALE_TYPE = 'CUSTOMER ASSIGN DET'
+              AND ASID.CALL_STATUS IN ('OUTGOING CALL')
+        LEFT JOIN AB_UM_APP_USER_ORG ORG ON ORG.USER_ID = UAU.USER_ID
+        WHERE UAU.STATUS = 'Y'
+          AND UAU.USER_ID IN (124, 119, 73, 74, 75, 76, 77, 78, 79, 80, 81, 84, 116, 85, 98, 117, 107, 118, 121, 120)
+          AND ORG.ORG_ID = :GV_ORG_ID
+        GROUP BY UAU.USER_NAME
+    ) LOOP
+        htp.p('<tr>');
+        htp.p('<td>' || r.SALE_OFFICER || '</td>');
+        htp.p('<td>' || r.TOTAL_CALLS || '</td>');
+
+        -- Add to total calls sum
+        v_total_calls_sum := v_total_calls_sum + NVL(r.TOTAL_CALLS, 0);
+
+        -- Day-wise data
+        FOR i IN 1..v_last_day LOOP
+            v_day := TO_CHAR(TRUNC(SYSDATE, 'MM') + (i - 1), 'DD-MM-YYYY');
+            DECLARE
+                v_count NUMBER := 0;
+            BEGIN
+                SELECT COUNT(*) INTO v_count
+                FROM AB_SALE_INFO_DET ASID
+                JOIN AB_SALE_INFO SI ON SI.SALE_ID = ASID.SALE_ID
+                WHERE SI.EMP_ID = r.USER_ID
+                  AND ASID.DET_SALE_TYPE = 'CUSTOMER ASSIGN DET'
+                  AND ASID.CALL_STATUS IN ('OUTGOING CALL')
+                  AND (TO_CHAR(ASID.CREATED_ON, 'DD-MM-YYYY') = v_day OR TO_CHAR(ASID.UPDATED_ON, 'DD-MM-YYYY') = v_day);
+                
+                -- Add to day sums
+                v_day_sums(i) := v_day_sums(i) + v_count;
+
+                IF v_count = 0 THEN
+                    htp.p('<td></td>');
+                ELSE
+                    htp.p('<td>' || v_count || '</td>');
+                END IF;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    htp.p('<td></td>');
+            END;
+        END LOOP;
+
+        htp.p('</tr>');
+    END LOOP;
+
+    -- Add totals row at the bottom
+    htp.p('<tr style="font-weight:bold; background-color:#d9edf7;">');
+    htp.p('<td>TOTAL CALLS:</td>');
+    htp.p('<td>' || v_total_calls_sum || '</td>');
+
+    FOR i IN 1..v_last_day LOOP
+        IF v_day_sums(i) = 0 THEN
+            htp.p('<td></td>');
+        ELSE
+            htp.p('<td>' || v_day_sums(i) || '</td>');
+        END IF;
+    END LOOP;
+    htp.p('</tr>');
+
+    htp.p('</table></div></body></html>');
+END;

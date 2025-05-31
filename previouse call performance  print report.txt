@@ -1,0 +1,313 @@
+-- DECLARE
+--     v_day         VARCHAR2(20);
+--     v_last_day    NUMBER;
+--     v_month       VARCHAR2(2);
+--     v_year        VARCHAR2(4);
+--     v_first_date  DATE;
+--     v_last_date   DATE;
+--     v_header_html VARCHAR2(32767);
+-- BEGIN
+--     -- Determine report month/year
+--     v_month := NVL(:P498_MONTH_V1, TO_CHAR(SYSDATE, 'MM'));
+--     v_year  := TO_CHAR(SYSDATE, 'YYYY');
+
+--     v_first_date := TO_DATE('01-' || v_month || '-' || v_year, 'DD-MM-YYYY');
+--     v_last_date  := LAST_DAY(v_first_date);
+--     v_last_day   := TO_NUMBER(TO_CHAR(v_last_date, 'DD'));
+
+--     -- Start HTML
+--     htp.p('<html>
+--     <head>
+--     <style>
+--         table, th, td { border: 1px solid black; border-collapse: collapse; padding: 4px; font-size: 13px; }
+--         th { background-color: #f2f2f2; }
+--     </style>
+--     <script>
+--         function printDiv(printpage) {
+--           var headstr = "<html><head><title></title><style>";
+--           headstr += "@page { size: A4 landscape; margin: 10mm; }";
+--           headstr += "body { margin: 0; font-family: Arial; }";
+--           headstr += "table { border-collapse: collapse; width: 100%; }";
+--           headstr += "th, td { border: 1px solid black; font-size: 10px; padding: 4px; }";
+--           headstr += "th { background-color: rgba(146, 208, 80, 0.3); -webkit-print-color-adjust: exact; }";
+--           headstr += "h3 { text-align: center; margin: 0; background-color: rgba(146, 208, 80); border: 1px solid black; }";
+--           headstr += "</style></head><body>";
+--           var footstr = "</body></html>";
+--           var newstr = document.getElementById(printpage).innerHTML;
+--           var oldstr = document.body.innerHTML;
+--           document.body.innerHTML = headstr + newstr + footstr;
+--           window.print();
+--           document.body.innerHTML = oldstr;
+--           return false;
+--         }
+--     </script>
+--     </head>
+--     <body>');
+
+--     -- Print Button
+--     htp.p('<button class="button" onclick="printDiv(''call_report'')">Print Call Report</button>');
+
+--     -- Report Section
+--     htp.p('<div id="call_report">');
+
+--     htp.p('<div style="display: flex; justify-content: space-between; margin-bottom: 20px;">');
+--     htp.p('<h2>AKBAR BROTHERS</h2>');
+--     htp.p('<img style="height: 100%" src="#APP_FILES#icons/Akbar Brothers logo.jpg" alt="">');
+--     htp.p('</div>');
+--     htp.p('<center><h3>Sales Officer Monthly Call Report - ' || TO_CHAR(v_first_date, 'Month YYYY') || '</h3></center>');
+
+--     -- Dynamic Table Header
+--     v_header_html := '<table><thead><tr><th>SALE OFFICER</th><th>TOTAL CALLS</th>';
+--     FOR i IN 1 .. v_last_day LOOP
+--         v_day := TO_CHAR(v_first_date + (i - 1), 'DD-MON');
+--         v_header_html := v_header_html || '<th>' || v_day || '</th>';
+--     END LOOP;
+--     v_header_html := v_header_html || '</tr></thead><tbody>';
+--     htp.p(v_header_html);
+
+--     -- Main Data Rows
+--     FOR r IN (
+--         SELECT 
+--             UAU.USER_NAME AS SALE_OFFICER,
+--             UAU.USER_ID,
+--             SUM(
+--                 CASE 
+--                     WHEN TRUNC(ASID.CREATED_ON) BETWEEN v_first_date AND v_last_date
+--                       OR TRUNC(ASID.UPDATED_ON) BETWEEN v_first_date AND v_last_date
+--                 THEN 1 ELSE 0 END
+--             ) AS TOTAL_CALLS
+--         FROM AB_UM_APPLICATION_USERS UAU
+--         LEFT JOIN AB_SALE_INFO SI ON SI.EMP_ID = UAU.USER_ID
+--         LEFT JOIN AB_SALE_INFO_DET ASID 
+--                ON ASID.SALE_ID = SI.SALE_ID
+--               AND ASID.DET_SALE_TYPE = 'CUSTOMER ASSIGN DET'
+--               AND ASID.CALL_STATUS = 'OUTGOING CALL'
+--               AND TRUNC(ASID.UPDATED_ON) BETWEEN v_first_date AND v_last_date
+--         LEFT JOIN AB_UM_APP_USER_ORG ORG ON ORG.USER_ID = UAU.USER_ID
+--         WHERE UAU.STATUS = 'Y'
+--           AND UAU.USER_ID IN (124, 119, 73, 74, 75, 76, 77, 78, 79, 80, 81, 84, 116, 85, 98, 117, 107, 118, 86, 121, 120)
+--           AND ORG.ORG_ID = :GV_ORG_ID
+--         GROUP BY UAU.USER_NAME, UAU.USER_ID
+--     ) LOOP
+--         htp.p('<tr>');
+--         htp.p('<td>' || r.SALE_OFFICER || '</td>');
+--         htp.p('<td>' || r.TOTAL_CALLS || '</td>');
+
+--         -- Loop for each day
+--         FOR i IN 1 .. v_last_day LOOP
+--             DECLARE
+--                 v_day_date DATE := v_first_date + (i - 1);
+--                 v_calls NUMBER := 0;
+--             BEGIN
+--                 SELECT COUNT(*)
+--                 INTO v_calls
+--                 FROM AB_SALE_INFO_DET ASID
+--                 JOIN AB_SALE_INFO SI ON ASID.SALE_ID = SI.SALE_ID
+--                 WHERE SI.EMP_ID = r.USER_ID
+--                   AND ASID.DET_SALE_TYPE = 'CUSTOMER ASSIGN DET'
+--                   AND ASID.CALL_STATUS = 'OUTGOING CALL'
+--                   AND TRUNC(NVL(ASID.UPDATED_ON, ASID.CREATED_ON)) = v_day_date;
+
+--                 IF v_calls > 0 THEN
+--                     htp.p('<td>' || v_calls || '</td>');
+--                 ELSE
+--                     htp.p('<td></td>');
+--                 END IF;
+--             EXCEPTION
+--                 WHEN OTHERS THEN
+--                     htp.p('<td></td>');
+--             END;
+--         END LOOP;
+
+--         htp.p('</tr>');
+--     END LOOP;
+
+--     htp.p('</tbody></table>');
+--     htp.p('</div></body></html>');
+-- END;
+
+
+-------------------------------------------------------
+
+
+DECLARE
+    v_day         VARCHAR2(20);
+    v_last_day    NUMBER;
+    v_month       VARCHAR2(2);
+    v_year        VARCHAR2(4);
+    v_first_date  DATE;
+    v_last_date   DATE;
+    v_header_html VARCHAR2(32767);
+    v_col_total   SYS.ODCINUMBERLIST := SYS.ODCINUMBERLIST(); -- Array for daily totals
+    v_total_calls NUMBER := 0; -- Grand total for calls
+BEGIN
+    -- Your existing month/year calculations here
+    v_month := NVL(:P498_MONTH_V1, TO_CHAR(SYSDATE, 'MM'));
+    v_year  := TO_CHAR(SYSDATE, 'YYYY');
+    v_first_date := TO_DATE('01-' || v_month || '-' || v_year, 'DD-MM-YYYY');
+    v_last_date  := LAST_DAY(v_first_date);
+    v_last_day   := TO_NUMBER(TO_CHAR(v_last_date, 'DD'));
+
+   
+        -- HTML start
+     htp.p('<html>
+    <head>
+    <style>
+        table, th, td { border: 1px solid black; border-collapse: collapse; padding: 4px; font-size: 13px; }
+        th { background-color: #f2f2f2; }
+    </style>
+    <script>
+        function adjustColumnWidth() {
+          var table = document.querySelector("table");
+          var itemNameColumnIndex = 1; // Index for ITEM NAME column
+          var maxWidth = 0;
+          var rows = table.querySelectorAll("tbody tr");
+          
+          rows.forEach(function(row) {
+            var itemNameCell = row.cells[itemNameColumnIndex];
+            if (itemNameCell) {
+              var cellWidth = itemNameCell.scrollWidth;
+              if (cellWidth > maxWidth) {
+                maxWidth = cellWidth;
+              }
+            }
+          });
+          
+          var header = table.querySelector("thead th.item-name-column");
+          if (header) {
+            header.style.width = maxWidth + "px";
+          }
+          
+          var dataCells = table.querySelectorAll("tbody td.item-name-column");
+          dataCells.forEach(function(cell) {
+            cell.style.width = maxWidth + "px";
+          });
+        }
+       
+        function printDiv(printpage) {
+          adjustColumnWidth();
+          var headstr = "<html><head><title></title><style>";
+          headstr += "@page { size: A4 landscape; margin: 10mm; }";
+          headstr += "body { margin: 0; padding: 0; font-family: Arial, sans-serif; }";
+          headstr += ".button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }";
+          headstr += ".button1 { font-size: 16px; }";
+          headstr += "table { border-collapse: collapse; width: 100%; margin: 0; padding: 0; }";
+          headstr += "th, td { border: 1px solid black; text-align: left; padding: 3px; font-size: 10px; line-height: 1.1; }";
+      
+          headstr += "th { background-color: rgba(146, 208, 80, 0.237); -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += ".separator { border-top: 1px solid black; }";
+          headstr += "h3 { margin: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(146, 208, 80); border: 1px solid black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += "@media print { thead {display: table-header-group;} tfoot {display: table-footer-group;} }";
+          headstr += "h2 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 0; text-align: center; }";
+          headstr += "#div_print1 { margin: 0; padding: 0; }";
+          headstr += "</style></head><body>";
+          var footstr = "</body></html>";
+          var newstr = document.getElementById(printpage).innerHTML;
+          var oldstr = document.body.innerHTML;
+          document.body.innerHTML = headstr + newstr + footstr;
+          window.print();
+          document.body.innerHTML = oldstr;
+          return false;
+        }
+      </script>
+    </head>
+    <body>');
+
+      htp.p('<button class="button" onclick="printDiv(''all_reports'')">Print Reports</button>');
+
+  -- Start merged report container
+        htp.p('<div id="all_reports">');
+
+            htp.p('<div class="header" style="display: flex; justify-content: space-between; margin-bottom: 20px; ">');
+    htp.p('<h2>AKBAR BROTHERS</h2>');
+    htp.p('<img style="height: 100%" src="#APP_FILES#icons/Akbar Brothers logo.jpg" alt="">');
+    htp.p('</div>');
+
+   htp.p('<div style="text-align: center;"><h3>Sales Officer Monthly Calls Report - ' || TO_CHAR(v_first_date, 'Month YYYY') || '</h3></div>');
+
+
+
+    FOR i IN 1 .. v_last_day LOOP
+        v_col_total.EXTEND;
+        v_col_total(i) := 0;
+    END LOOP;
+    v_header_html := '<table><thead><tr><th>SALE OFFICER</th><th>TOTAL CALLS</th>';
+    FOR i IN 1 .. v_last_day LOOP
+        v_day := TO_CHAR(v_first_date + (i - 1), 'DD-MON');
+        v_header_html := v_header_html || '<th>' || v_day || '</th>';
+    END LOOP;
+    v_header_html := v_header_html || '</tr></thead><tbody>';
+    htp.p(v_header_html);
+    FOR r IN (
+        SELECT 
+            UAU.USER_NAME AS SALE_OFFICER,
+            UAU.USER_ID,
+            -- Calculate total calls in the month
+            COUNT(ASID.SALE_ID) AS TOTAL_CALLS
+        FROM AB_UM_APPLICATION_USERS UAU
+        LEFT JOIN AB_SALE_INFO SI ON SI.EMP_ID = UAU.USER_ID
+        LEFT JOIN AB_SALE_INFO_DET ASID 
+               ON ASID.SALE_ID = SI.SALE_ID
+              AND ASID.DET_SALE_TYPE = 'CUSTOMER ASSIGN DET'
+              AND ASID.CALL_STATUS = 'OUTGOING CALL'
+              AND TRUNC(ASID.UPDATED_ON) BETWEEN v_first_date AND v_last_date
+        WHERE UAU.STATUS = 'Y'
+          AND UAU.USER_ID IN (124, 119, 73, 74, 75, 76, 77, 78, 79, 80, 81, 84, 116, 85, 98, 117, 107 /* etc. */)
+        GROUP BY UAU.USER_NAME, UAU.USER_ID
+        ORDER BY UAU.USER_NAME
+    ) LOOP
+        htp.p('<tr>');
+        htp.p('<td>' || r.SALE_OFFICER || '</td>');
+        htp.p('<td>' || r.TOTAL_CALLS || '</td>');
+
+        -- Add to grand total
+        v_total_calls := v_total_calls + r.TOTAL_CALLS;
+
+        -- Now print daily calls
+        FOR i IN 1 .. v_last_day LOOP
+            DECLARE
+                v_day_date DATE := v_first_date + (i - 1);
+                v_calls NUMBER := 0;
+            BEGIN
+                SELECT COUNT(*)
+                INTO v_calls
+                FROM AB_UM_APPLICATION_USERS UAU2
+                JOIN AB_SALE_INFO SI2 ON SI2.EMP_ID = UAU2.USER_ID
+                JOIN AB_SALE_INFO_DET ASID2 ON ASID2.SALE_ID = SI2.SALE_ID
+                WHERE UAU2.USER_ID = r.USER_ID
+                  AND ASID2.DET_SALE_TYPE = 'CUSTOMER ASSIGN DET'
+                  AND ASID2.CALL_STATUS = 'OUTGOING CALL'
+                  AND TRUNC(ASID2.UPDATED_ON) = v_day_date;
+
+                -- Add to column total
+                v_col_total(i) := v_col_total(i) + v_calls;
+
+                IF v_calls > 0 THEN
+                    htp.p('<td>' || v_calls || '</td>');
+                ELSE
+                    htp.p('<td></td>');
+                END IF;
+
+            EXCEPTION
+                WHEN OTHERS THEN
+                    htp.p('<td></td>');
+            END;
+        END LOOP;
+
+        htp.p('</tr>');
+    END LOOP;
+    v_header_html := '<tr><td><b>Grand Total:</b></td><td><b>' || v_total_calls || '</b></td>';
+    FOR i IN 1 .. v_last_day LOOP
+        IF v_col_total(i) > 0 THEN
+            v_header_html := v_header_html || '<td><b>' || v_col_total(i) || '</b></td>';
+        ELSE
+            v_header_html := v_header_html || '<td></td>';
+        END IF;
+    END LOOP;
+    v_header_html := v_header_html || '</tr>';
+
+    htp.p(v_header_html);
+    htp.p('</tbody></table>');
+    htp.p('</div></body></html>');
+END;
+

@@ -1,0 +1,386 @@
+-- DECLARE
+--     v_day         VARCHAR2(20);
+--     v_last_day    NUMBER;
+--     v_header_html VARCHAR2(32767);
+--     v_html        VARCHAR2(32767);
+-- BEGIN
+--     -- HTML Header with styles and scripts
+--     htp.p('<html>
+--     <head>
+--     <style>
+--         table, th, td { border: 1px solid black; border-collapse: collapse; padding: 4px; font-size: 13px; }
+--         th { background-color: #f2f2f2; }
+--     </style>
+--     <script>
+--         function adjustColumnWidth() {
+--           var table = document.querySelector("table");
+--           var itemNameColumnIndex = 1; // Index for ITEM NAME column
+--           var maxWidth = 0;
+--           var rows = table.querySelectorAll("tbody tr");
+          
+--           rows.forEach(function(row) {
+--             var itemNameCell = row.cells[itemNameColumnIndex];
+--             if (itemNameCell) {
+--               var cellWidth = itemNameCell.scrollWidth;
+--               if (cellWidth > maxWidth) {
+--                 maxWidth = cellWidth;
+--               }
+--             }
+--           });
+          
+--           var header = table.querySelector("thead th.item-name-column");
+--           if (header) {
+--             header.style.width = maxWidth + "px";
+--           }
+          
+--           var dataCells = table.querySelectorAll("tbody td.item-name-column");
+--           dataCells.forEach(function(cell) {
+--             cell.style.width = maxWidth + "px";
+--           });
+--         }
+       
+--         function printDiv(printpage) {
+--           adjustColumnWidth();
+--           var headstr = "<html><head><title></title><style>";
+--           headstr += "@page { size: A4 landscape; margin: 10mm; }";
+--           headstr += "body { margin: 0; padding: 0; font-family: Arial, sans-serif; }";
+--           headstr += ".button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }";
+--           headstr += ".button1 { font-size: 16px; }";
+--           headstr += "table { border-collapse: collapse; width: 100%; margin: 0; padding: 0; }";
+--           headstr += "th, td { border: 1px solid black; text-align: left; padding: 3px; font-size: 10px; line-height: 1.1; }";
+      
+--           headstr += "th { background-color: rgba(146, 208, 80, 0.237); -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+--           headstr += ".separator { border-top: 1px solid black; }";
+--           headstr += "h3 { margin: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(146, 208, 80); border: 1px solid black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+--           headstr += "@media print { thead {display: table-header-group;} tfoot {display: table-footer-group;} }";
+--           headstr += "h2 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 0; text-align: center; }";
+--           headstr += "#div_print1 { margin: 0; padding: 0; }";
+--           headstr += "</style></head><body>";
+--           var footstr = "</body></html>";
+--           var newstr = document.getElementById(printpage).innerHTML;
+--           var oldstr = document.body.innerHTML;
+--           document.body.innerHTML = headstr + newstr + footstr;
+--           window.print();
+--           document.body.innerHTML = oldstr;
+--           return false;
+--         }
+--       </script>
+--     </head>
+--     <body>');
+
+--       htp.p('<button class="button" onclick="printDiv(''all_reports'')">Print Reports</button>');
+
+--   -- Start merged report container
+--         htp.p('<div id="all_reports">');
+
+--     htp.p('<div class="header" style="display: flex; justify-content: space-between; margin-bottom: 20px; ">');
+--     htp.p('<h2>AKBAR BROTHERS</h2>');
+--     htp.p('<img style="height: 100%" src="#APP_FILES#icons/Akbar Brothers logo.jpg" alt="">');
+--     htp.p('</div>');
+--     htp.p('<center><h3>Sales Officer Daily Bags Report</h3></center>');
+
+--     htp.p('<table><thead>');
+    
+--     -- Table header
+--     v_last_day := TO_NUMBER(TO_CHAR(LAST_DAY(SYSDATE), 'DD'));
+--     v_header_html := '<tr><th>SALE OFFICER</th><th>TOTAL BAGS</th>';
+
+--     FOR i IN 1..v_last_day LOOP
+--         v_day := TO_CHAR(TRUNC(SYSDATE, 'MM') + (i - 1), 'DD-MON');
+--         v_header_html := v_header_html || '<th>' || v_day || '</th>';
+--     END LOOP;
+--     v_header_html := v_header_html || '</tr>';
+--     htp.p(v_header_html || '</thead><tbody>');
+
+--     -- Table body (loop through users and daily bags)
+--     FOR r IN (
+--         SELECT 
+--             UM.USER_NAME,
+--             UM.USER_ID,
+--             NVL(SUM(SALES.NO_BAGS), 0) AS TOTAL_BAGS
+--         FROM AB_UM_APPLICATION_USERS UM
+--         LEFT JOIN (
+--             SELECT 
+--                 SOD.SOD_ID,
+--                 SO.SO_ID,
+--                 SO.SALE_OFFER_ID,
+--                 SOD.NO_BAGS,
+--                 SO.ORDER_DATE
+--             FROM AB_SO_ORDER_HEAD SO
+--             LEFT JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
+--             WHERE SO.SO_TYPE = 'SALE ORDER'
+--               AND SO.ORG_ID = :GV_ORG_ID
+--               AND SO.STATUS = 'Y'
+--               AND SOD.STATUS = 'Y'
+--               AND TRUNC(SO.ORDER_DATE) >= TRUNC(SYSDATE, 'MM')
+--         ) SALES ON SALES.SALE_OFFER_ID = UM.USER_ID
+--         WHERE UM.USER_ID = NVL(:P498_SALE_OFFICER, UM.USER_ID)
+--           AND UM.USER_ID IN (124, 119, 73, 74, 75, 76, 77, 78, 79, 80, 81, 84, 116, 85, 98, 117, 107, 118, 86, 121, 120, 130)
+--         GROUP BY UM.USER_NAME, UM.USER_ID
+--     ) LOOP
+--         htp.p('<tr>');
+--         htp.p('<td>' || r.USER_NAME || '</td>');
+--         htp.p('<td>' || r.TOTAL_BAGS || '</td>');
+
+--         -- Loop day-wise for each officer
+--         FOR i IN 1..v_last_day LOOP
+--             v_day := TO_CHAR(TRUNC(SYSDATE, 'MM') + (i - 1), 'DD-MON-YYYY');
+--             DECLARE
+--                 v_bags NUMBER := 0;
+--                 v_link VARCHAR2(4000);
+--             BEGIN
+--                 SELECT NVL(SUM(SALES.NO_BAGS), 0)
+--                 INTO v_bags
+--                 FROM (
+--                     SELECT 
+--                         SOD.NO_BAGS,
+--                         SO.ORDER_DATE
+--                     FROM AB_SO_ORDER_HEAD SO
+--                     JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
+--                     WHERE SO.SO_TYPE = 'SALE ORDER'
+--                       AND SO.ORG_ID = :GV_ORG_ID
+--                       AND SO.STATUS = 'Y'
+--                       AND SOD.STATUS = 'Y'
+--                       AND TO_CHAR(SO.ORDER_DATE, 'DD-MON-YYYY') = v_day
+--                       AND SO.SALE_OFFER_ID = r.USER_ID
+--                 ) SALES;
+
+--                 -- Generate link
+--                 SELECT GET_SECURE_LINK_SALE_BAGS(
+--                     MAX(SOD.SOD_ID),
+--                     r.USER_ID,
+--                     TO_DATE(v_day, 'DD-MON-YYYY')
+--                 )
+--                 INTO v_link
+--                 FROM AB_SO_ORDER_HEAD SO
+--                 JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
+--                 WHERE SO.SO_TYPE = 'SALE ORDER'
+--                   AND SO.ORG_ID = :GV_ORG_ID
+--                   AND SO.STATUS = 'Y'
+--                   AND SOD.STATUS = 'Y'
+--                   AND TO_CHAR(SO.ORDER_DATE, 'DD-MON-YYYY') = v_day
+--                   AND SO.SALE_OFFER_ID = r.USER_ID;
+
+--                 IF v_bags > 0 THEN
+--                     htp.p('<td>'|| v_bags || '</a></td>');
+--                 ELSE
+--                     htp.p('<td></td>');
+--                 END IF;
+--             EXCEPTION
+--                 WHEN OTHERS THEN
+--                     htp.p('<td></td>');
+--             END;
+--         END LOOP;
+
+--         htp.p('</tr>');
+--     END LOOP;
+
+--     htp.p('</tbody></table>');
+--     htp.p('</div></body></html>');
+-- END;
+
+
+---------------------------------------------
+DECLARE
+    v_day         VARCHAR2(20);
+    v_last_day    NUMBER;
+    v_header_html VARCHAR2(32767);
+    v_html        VARCHAR2(32767);
+
+    -- Variables to hold totals
+    v_total_bags_sum NUMBER := 0;
+    TYPE t_day_sums IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+    v_day_sums t_day_sums;
+
+BEGIN
+    -- HTML Header with styles and scripts
+    htp.p('<html>
+    <head>
+    <style>
+        table, th, td { border: 1px solid black; border-collapse: collapse; padding: 4px; font-size: 13px; }
+        th { background-color: #f2f2f2; }
+        tfoot td { font-weight: bold; background-color: #e0e0e0; }
+    </style>
+    <script>
+         function adjustColumnWidth() {
+          var table = document.querySelector("table");
+          var itemNameColumnIndex = 1; // Index for ITEM NAME column
+          var maxWidth = 0;
+          var rows = table.querySelectorAll("tbody tr");
+          
+          rows.forEach(function(row) {
+            var itemNameCell = row.cells[itemNameColumnIndex];
+            if (itemNameCell) {
+              var cellWidth = itemNameCell.scrollWidth;
+              if (cellWidth > maxWidth) {
+                maxWidth = cellWidth;
+              }
+            }
+          });
+          
+          var header = table.querySelector("thead th.item-name-column");
+          if (header) {
+            header.style.width = maxWidth + "px";
+          }
+          
+          var dataCells = table.querySelectorAll("tbody td.item-name-column");
+          dataCells.forEach(function(cell) {
+            cell.style.width = maxWidth + "px";
+          });
+        }
+       
+        function printDiv(printpage) {
+          adjustColumnWidth();
+          var headstr = "<html><head><title></title><style>";
+          headstr += "@page { size: A4 landscape; margin: 10mm; }";
+          headstr += "body { margin: 0; padding: 0; font-family: Arial, sans-serif; }";
+          headstr += ".button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }";
+          headstr += ".button1 { font-size: 16px; }";
+          headstr += "table { border-collapse: collapse; width: 100%; margin: 0; padding: 0; }";
+          headstr += "th, td { border: 1px solid black; text-align: left; padding: 3px; font-size: 12px; line-height: 1.1; }";
+      
+          headstr += "th { background-color: rgba(146, 208, 80, 0.237); -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += ".separator { border-top: 1px solid black; }";
+          headstr += "h3 { margin: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(146, 208, 80); border: 1px solid black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += "@media print { thead {display: table-header-group;} tfoot {display: table-footer-group;} }";
+          headstr += "h2 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 0; text-align: center; }";
+          headstr += "#div_print1 { margin: 0; padding: 0; }";
+          headstr += "</style></head><body>";
+          var footstr = "</body></html>";
+          var newstr = document.getElementById(printpage).innerHTML;
+          var oldstr = document.body.innerHTML;
+          document.body.innerHTML = headstr + newstr + footstr;
+          window.print();
+          document.body.innerHTML = oldstr;
+          return false;
+        }
+    </script>
+    </head>
+    <body>');
+
+    htp.p('<button class="button" onclick="printDiv(''all_reports'')">Print Reports</button>');
+
+    htp.p('<div id="all_reports">');
+
+    htp.p('<div class="header" style="display: flex; justify-content: space-between; margin-bottom: 20px; ">');
+    htp.p('<h2>AKBAR BROTHERS</h2>');
+    htp.p('<img style="height: 100%" src="#APP_FILES#icons/Akbar Brothers logo.jpg" alt="">');
+    htp.p('</div>');
+    htp.p('<center><h3>Sales Officer Daily Bags Report</h3></center>');
+
+    htp.p('<table><thead>');
+
+    v_last_day := TO_NUMBER(TO_CHAR(LAST_DAY(SYSDATE), 'DD'));
+    v_header_html := '<tr><th>SALE OFFICER</th><th>TOTAL BAGS</th>';
+
+    FOR i IN 1..v_last_day LOOP
+        v_day := TO_CHAR(TRUNC(SYSDATE, 'MM') + (i - 1), 'DD-MON');
+        v_header_html := v_header_html || '<th>' || v_day || '</th>';
+
+        -- Initialize day sums to zero
+        v_day_sums(i) := 0;
+    END LOOP;
+    v_header_html := v_header_html || '</tr>';
+    htp.p(v_header_html || '</thead><tbody>');
+
+    -- Table body
+    FOR r IN (
+        SELECT 
+            UM.USER_NAME,
+            UM.USER_ID,
+            NVL(SUM(SALES.NO_BAGS), 0) AS TOTAL_BAGS
+        FROM AB_UM_APPLICATION_USERS UM
+        LEFT JOIN (
+            SELECT 
+                SOD.SOD_ID,
+                SO.SO_ID,
+                SO.SALE_OFFER_ID,
+                SOD.NO_BAGS,
+                SO.ORDER_DATE
+            FROM AB_SO_ORDER_HEAD SO
+            LEFT JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
+            WHERE SO.SO_TYPE = 'SALE ORDER'
+              AND SO.ORG_ID = :GV_ORG_ID
+              AND SO.STATUS = 'Y'
+              AND SOD.STATUS = 'Y'
+              AND TRUNC(SO.ORDER_DATE) >= TRUNC(SYSDATE, 'MM')
+        ) SALES ON SALES.SALE_OFFER_ID = UM.USER_ID
+        WHERE UM.USER_ID = NVL(:P498_SALE_OFFICER, UM.USER_ID)
+          AND UM.USER_ID IN (124, 119, 73, 74, 75, 76, 77, 78, 79, 80, 81, 84, 116, 85, 98, 117, 107, 118, 86, 121, 120, 130)
+        GROUP BY UM.USER_NAME, UM.USER_ID
+    ) LOOP
+        htp.p('<tr>');
+        htp.p('<td>' || r.USER_NAME || '</td>');
+        htp.p('<td>' || r.TOTAL_BAGS || '</td>');
+
+        -- Add to total bags sum
+        v_total_bags_sum := v_total_bags_sum + r.TOTAL_BAGS;
+
+        -- Loop for daily columns
+        FOR i IN 1..v_last_day LOOP
+            v_day := TO_CHAR(TRUNC(SYSDATE, 'MM') + (i - 1), 'DD-MON-YYYY');
+            DECLARE
+                v_bags NUMBER := 0;
+                v_link VARCHAR2(4000);
+            BEGIN
+                SELECT NVL(SUM(SALES.NO_BAGS), 0)
+                INTO v_bags
+                FROM (
+                    SELECT 
+                        SOD.NO_BAGS,
+                        SO.ORDER_DATE
+                    FROM AB_SO_ORDER_HEAD SO
+                    JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
+                    WHERE SO.SO_TYPE = 'SALE ORDER'
+                      AND SO.ORG_ID = :GV_ORG_ID
+                      AND SO.STATUS = 'Y'
+                      AND SOD.STATUS = 'Y'
+                      AND TO_CHAR(SO.ORDER_DATE, 'DD-MON-YYYY') = v_day
+                      AND SO.SALE_OFFER_ID = r.USER_ID
+                ) SALES;
+
+                -- Add to daily sums
+                v_day_sums(i) := NVL(v_day_sums(i),0) + v_bags;
+
+                -- Generate link
+                SELECT GET_SECURE_LINK_SALE_BAGS(
+                    MAX(SOD.SOD_ID),
+                    r.USER_ID,
+                    TO_DATE(v_day, 'DD-MON-YYYY')
+                )
+                INTO v_link
+                FROM AB_SO_ORDER_HEAD SO
+                JOIN AB_SO_ORDER_DET SOD ON SOD.SO_ID = SO.SO_ID
+                WHERE SO.SO_TYPE = 'SALE ORDER'
+                  AND SO.ORG_ID = :GV_ORG_ID
+                  AND SO.STATUS = 'Y'
+                  AND SOD.STATUS = 'Y'
+                  AND TO_CHAR(SO.ORDER_DATE, 'DD-MON-YYYY') = v_day
+                  AND SO.SALE_OFFER_ID = r.USER_ID;
+
+                IF v_bags > 0 THEN
+                    htp.p('<td>'|| v_bags || '</td>');
+                ELSE
+                    htp.p('<td></td>');
+                END IF;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    htp.p('<td></td>');
+            END;
+        END LOOP;
+
+        htp.p('</tr>');
+    END LOOP;
+
+    -- Footer with totals
+    htp.p('</tbody><tfoot><tr>');
+    htp.p('<td style="text-align:left;">Grand Total:</td>');
+    htp.p('<td>' || v_total_bags_sum || '</td>');
+    FOR i IN 1..v_last_day LOOP
+        htp.p('<td>' || NVL(v_day_sums(i), 0) || '</td>');
+    END LOOP;
+    htp.p('</tr></tfoot>');
+
+    htp.p('</table>');
+    htp.p('</div></body></html>');
+END;
