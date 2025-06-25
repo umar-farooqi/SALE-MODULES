@@ -1,0 +1,622 @@
+DECLARE
+  v_tax_liability NUMBER := 0;
+  v_inv_net_amount NUMBER := 0;
+  v_inv_bags NUMBER := 0;
+  v_cprn_payments NUMBER := 0;
+BEGIN
+  -- JavaScript for printing and adjusting column widths
+ htp.p('<script>
+        function adjustColumnWidth() {
+          var table = document.querySelector("table");
+          var itemNameColumnIndex = 1; // Index for ITEM NAME column
+          var maxWidth = 0;
+          var rows = table.querySelectorAll("tbody tr");
+          
+          rows.forEach(function(row) {
+            var itemNameCell = row.cells[itemNameColumnIndex];
+            if (itemNameCell) {
+              var cellWidth = itemNameCell.scrollWidth;
+              if (cellWidth > maxWidth) {
+                maxWidth = cellWidth;
+              }
+            }
+          });
+          
+          var header = table.querySelector("thead th.item-name-column");
+          if (header) {
+            header.style.width = maxWidth + "px";
+          }
+          
+          var dataCells = table.querySelectorAll("tbody td.item-name-column");
+          dataCells.forEach(function(cell) {
+            cell.style.width = maxWidth + "px";
+          });
+        }
+       
+        function printDiv(printpage) {
+          adjustColumnWidth();
+          var headstr = "<html><head><title></title><style>";
+          headstr += "@page { size: A4 landscape; margin: 10mm; }";
+          headstr += "body { margin: 0; padding: 0; font-family: Arial, sans-serif; }";
+          headstr += ".button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }";
+          headstr += ".button1 { font-size: 16px; }";
+          headstr += "table { border-collapse: collapse; width: 100%; margin: 0; padding: 0; }";
+          headstr += "th, td { text-align: left; padding: 3px; font-size: 10px; line-height: 1.1; }";
+          headstr += "th { background-color: rgba(146, 208, 80, 0.237); -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += ".separator { border-top: 1px solid black; }";
+          headstr += "h3 { margin: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(146, 208, 80); border: 1px solid black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += "@media print { thead {display: table-header-group;} tfoot {display: table-footer-group;} }";
+          headstr += "h2 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 0; text-align: center; }";
+          headstr += "#div_print1 { margin: 0; padding: 0; }";
+          headstr += "</style></head><body>";
+          var footstr = "</body></html>";
+          var newstr = document.getElementById(printpage).innerHTML;
+          var oldstr = document.body.innerHTML;
+          document.body.innerHTML = headstr + newstr + footstr;
+          window.print();
+          document.body.innerHTML = oldstr;
+          return false;
+        }
+      </script>');
+
+  -- Print buttons for both reports
+ -- htp.p('<button class="button" onclick="printDiv(''amanat_inward_report'')">Print Amanat Inward Report</button>');
+  htp.p('<button class="button" onclick="printDiv(''all_reports'')">Print Reports</button>');
+
+  -- Start merged report container
+  htp.p('<div id="all_reports">');
+
+  -- Daily Stock Report Section`
+  htp.p('<div class="header" style="display: flex; justify-content: space-between; margin-bottom: 20px; ">');
+    htp.p('<h2>AKBAR BROTHERS</h2>');
+    htp.p('<img style="height: 100%" src="#APP_FILES#icons/Akbar Brothers logo.jpg" alt="">');
+    htp.p('</div>');
+
+  htp.p('<h3>Tax Invoice Wise</h3>');
+  htp.p('<table>');
+  htp.p('<tr style="padding: 8px; border: 1px solid #ddd;" ><th>Vendor</th><th>Agency Name</th><th>Product</th><th>Invoice Bags</th><th>Inv Net Amount</th><th>Exemption %</th><th>Tax Liability</th></tr>');
+
+  -- Cursor to fetch actual records — you must insert your real query here
+  FOR rec IN (
+           WITH TAX_POLICY AS (
+                SELECT 
+                    POLICY_ID,
+                    FED,
+                    GST,
+                    AIT 
+                FROM
+                    AB_SETUP_POLICY_REGISTERED SPR
+                WHERE
+                    STATUS = 'Y'
+                    AND ORG_ID=:GV_ORG_ID
+)
+,PURCHASE_ORDER AS(
+                SELECT
+                        PO_ID,
+                        POD_ID,
+                        COMPANY_ORDER_NO,
+                        TRANSACTION_DATE,
+                        PURCHASING_TYPE,
+                        ITEM_ID,
+                        ITEM_NAME,
+                        NO_BAGS,
+                        NVL(TOTAL_AMOUNT,0)/NVL(NO_BAGS,0) PER_BAGS,
+                        TOTAL_AMOUNT
+                FROM(
+                SELECT
+                                PO_ID,
+                                DET_ID POD_ID,
+                                COMPANY_ORDER_NO,
+                                TRANSACTION_DATE,
+                                PURCHASING_TYPE,
+                                ITEM_ID,
+                                ITEM_NAME,
+                                NO_BAGS,
+                            CASE
+                                        WHEN AIT IS NULL THEN     ROUND(AFTER_GST_VALUE,0)
+                                        ELSE   ROUND(NVL(AFTER_GST_VALUE,0) * NVL(AIT,0)/100)+ROUND(NVL(AFTER_GST_VALUE,0))
+                                END TOTAL_AMOUNT
+                FROM (
+                SELECT
+                            POR.DET_ID ,
+                            POR.PO_ID,
+                            TO_CHAR(PO.TRANSACTION_DATE, 'DD-MON-YYYY') AS TRANSACTION_DATE,
+                            PO.COMPANY_ORDER_NO,
+                            PO.LOADING_NAME AS LOADING_POINT,
+                            PO.PURCHASING_TYPE,
+                            ITM.ITEM_ID,
+                            ITM.ITEM_NAME||' ('|| ITM.PACKING_SIZE || ' '|| ITM.UNIT || ' '|| ITM.PACKING || ')' AS ITEM_NAME,
+                            POR.CHANGE_BAGS NO_BAGS,
+                            CASE 
+                                    WHEN GST IS NULL THEN NVL(POR.NET_AMOUNT,0)+(NVL(FED,0) * NVL(POR.NET_AMOUNT, 0) / 100) 
+                                    WHEN  FED IS NULL THEN ((NVL(POR.NET_AMOUNT, 0) * NVL(GST,0) )/100)  + NVL(POR.NET_AMOUNT,0)+(NVL(FED,0) * NVL(POR.NET_AMOUNT, 0) / 100) 
+                                    ELSE ((NVL(POR.NET_AMOUNT, 0) + (FED * NVL(POR.NET_AMOUNT, 0) / 100)) * NVL(GST, 0) / 100) +  NVL(POR.NET_AMOUNT,0)+(NVL(FED,0) * NVL(POR.NET_AMOUNT, 0) / 100) 
+                            END AFTER_GST_VALUE,
+                            AIT,
+                            POR.TAX_POLICY_ID,
+                            DEAL_POLICY_ID
+                FROM 
+                                         AB_PO_DEMAND_REQ_DET DRD
+                          JOIN   AB_ITEMS_MASTER ITM ON ITM.ITEM_ID = DRD.ITEM_ID
+                          JOIN   AB_PO_PURCHASE_ORDER_DET POR ON POR.DEMAND_DET_ID = DRD.DET_ID
+                          JOIN   AB_LOOKUP_DETAIL LD ON LD.DET_ID = ITM.PRODUCT_CATEGORY_ID
+                          JOIN   AB_PO_PURCHASE_ORDER PO ON PO.PO_ID=POR.PO_ID
+                LEFT  JOIN   TAX_POLICY TP ON TP.POLICY_ID = POR.TAX_POLICY_ID
+          WHERE
+                           POR.ORG_ID=:GV_ORG_ID
+                AND  PO.PO_TYPE='PURCHASE ORDER'
+                AND  POR.STATUS='Y'
+UNION ALL
+                 SELECT
+                            POR.DET_ID ,
+                            POR.PO_ID,
+                            TO_CHAR(PO.TRANSACTION_DATE, 'DD-MON-YYYY') AS TRANSACTION_DATE,
+                            PO.COMPANY_ORDER_NO,
+                            PO.LOADING_NAME AS LOADING_POINT,
+                            PO.PURCHASING_TYPE,
+                            ITM.ITEM_ID,
+                            ITM.ITEM_NAME||' ('|| ITM.PACKING_SIZE || ' '|| ITM.UNIT || ' '|| ITM.PACKING || ')' AS ITEM_NAME,
+                            POR.CHANGE_BAGS NO_BAGS,
+                            CASE 
+                                    WHEN GST IS NULL THEN NVL(POR.NET_AMOUNT,0)+(NVL(FED,0) * NVL(POR.NET_AMOUNT, 0) / 100) 
+                                    WHEN  FED IS NULL THEN ((NVL(POR.NET_AMOUNT, 0) * NVL(GST,0) )/100)  + NVL(POR.NET_AMOUNT,0)+(NVL(FED,0) * NVL(POR.NET_AMOUNT, 0) / 100) 
+                                    ELSE ((NVL(POR.NET_AMOUNT, 0) + (FED * NVL(POR.NET_AMOUNT, 0) / 100)) * NVL(GST, 0) / 100) +  NVL(POR.NET_AMOUNT,0)+(NVL(FED,0) * NVL(POR.NET_AMOUNT, 0) / 100) 
+                            END AFTER_GST_VALUE,
+                            AIT,
+                            POR.TAX_POLICY_ID,
+                            POR.DEAL_POLICY_ID
+                FROM 
+                                         AB_PO_DEMAND_REQ_DET DRD
+                     LEFT     JOIN   AB_ITEMS_MASTER ITM ON ITM.ITEM_ID = DRD.ITEM_ID
+                      LEFT    JOIN   AB_PO_PURCHASE_ORDER_DET PORD ON PORD.DEMAND_DET_ID = DRD.DET_ID
+                      LEFT    JOIN   AB_PO_PURCHASE_ORDER_DET POR ON POR.IDS = PORD.DET_ID
+                     LEFT     JOIN   AB_LOOKUP_DETAIL LD ON LD.DET_ID = ITM.PRODUCT_CATEGORY_ID
+                   LEFT       JOIN   AB_PO_PURCHASE_ORDER PO ON PO.PO_ID=POR.PO_ID
+                LEFT  JOIN   TAX_POLICY TP ON TP.POLICY_ID = POR.TAX_POLICY_ID
+          WHERE
+                           POR.ORG_ID=:GV_ORG_ID
+               AND  PO.PO_TYPE='SUB PO'
+                AND POR.STATUS='Y'
+                AND  POR.ITEM_ID IS  NULL
+UNION
+                 SELECT
+                            POR.DET_ID ,
+                            POR.PO_ID,
+                            TO_CHAR(PO.TRANSACTION_DATE, 'DD-MON-YYYY') AS TRANSACTION_DATE,
+                            PO.COMPANY_ORDER_NO,
+                            PO.LOADING_NAME AS LOADING_POINT,
+                            PO.PURCHASING_TYPE,
+                            ITM.ITEM_ID,
+                            ITM.ITEM_NAME||' ('|| ITM.PACKING_SIZE || ' '|| ITM.UNIT || ' '|| ITM.PACKING || ')' AS ITEM_NAME,
+                            POR.CHANGE_BAGS NO_BAGS,
+                            CASE 
+                                    WHEN GST IS NULL THEN NVL(POR.NET_AMOUNT,0)+(NVL(FED,0) * NVL(POR.NET_AMOUNT, 0) / 100) 
+                                    WHEN  FED IS NULL THEN ((NVL(POR.NET_AMOUNT, 0) * NVL(GST,0) )/100)  + NVL(POR.NET_AMOUNT,0)+(NVL(FED,0) * NVL(POR.NET_AMOUNT, 0) / 100) 
+                                    ELSE ((NVL(POR.NET_AMOUNT, 0) + (FED * NVL(POR.NET_AMOUNT, 0) / 100)) * NVL(GST, 0) / 100) +  NVL(POR.NET_AMOUNT,0)+(NVL(FED,0) * NVL(POR.NET_AMOUNT, 0) / 100) 
+                            END AFTER_GST_VALUE,
+                            AIT,
+                            POR.TAX_POLICY_ID,
+                            POR.DEAL_POLICY_ID
+                FROM 
+                                         AB_PO_PURCHASE_ORDER_DET POR
+                          JOIN   AB_ITEMS_MASTER ITM ON ITM.ITEM_ID = POR.ITEM_ID
+                   --   LEFT    JOIN   AB_PO_PURCHASE_ORDER_DET PORD ON PORD.DEMAND_DET_ID = DRD.DET_ID
+                    --  LEFT    JOIN   AB_PO_PURCHASE_ORDER_DET POR ON POR.IDS = PORD.DET_ID
+                     LEFT     JOIN   AB_LOOKUP_DETAIL LD ON LD.DET_ID = ITM.PRODUCT_CATEGORY_ID
+                   LEFT       JOIN   AB_PO_PURCHASE_ORDER PO ON PO.PO_ID=POR.PO_ID
+                LEFT  JOIN   TAX_POLICY TP ON TP.POLICY_ID = POR.TAX_POLICY_ID
+          WHERE
+                           POR.ORG_ID=:GV_ORG_ID
+               AND  PO.PO_TYPE='SUB PO'
+                AND POR.STATUS='Y'
+                AND  POR.ITEM_ID IS NOT NULL
+              --  AND PO.PO_ID=3127
+              ))C
+)
+,PO_LOV_DATA AS(
+   SELECT 
+                         PO_ID,
+                        MAX(CASE WHEN REG.REG_TYPE = 'COMPANY' AND REG.SR_ID = PO.COMPANY_ID THEN REG.REG_NAME END) AS COMPANY_NAME,
+                        MAX(CASE WHEN (REG.REG_TYPE = 'DEALER' OR REG.REG_TYPE = 'VENDOR' OR REG.REG_TYPE = 'CUSTOMER REGISTRATION') AND REG.SR_ID = PO.VENDOR_ID THEN COALESCE(REG.PARTY_NAME, REG.REG_NAME) END) AS VENDOR_NAME,
+                        MAX(CASE WHEN REG.REG_TYPE = 'AGENCY' AND REG.SR_ID = PO.AGENCY_ID THEN REG.REG_NAME || ' - ' || REG.REG_CODE END) AS AGENCY_NAME,
+                        MAX(CASE WHEN REG.REG_TYPE = 'SALE POINT' AND REG.SR_ID = PO.SALE_POINT_ID THEN REG.REG_NAME END) AS SALE_POINT,
+                        MAX(CASE WHEN LD.DET_ID = PO.LOADING_TYPE_ID THEN LD.LOOKUP_DET_NAME END) AS LOADING_TYPE,
+                        MAX(CASE WHEN LD.DET_ID = PO.FREIGHT_TYPE_ID THEN LD.LOOKUP_DET_NAME END) AS FREIGHT_TYPE_NAME,
+                        MAX(CASE WHEN LD.DET_ID = PO.PAYMENT_MODE_ID THEN LD.LOOKUP_DET_NAME END) AS PAYMENT_MODE_NAME,
+                        MAX(CASE WHEN LD.DET_ID = PO.TRANSACTION_TYPE_ID THEN LD.LOOKUP_DET_NAME END) AS TRANSACTION_TYPE,
+                        MAX(CASE WHEN REG.REG_TYPE = 'BANK' AND REG.SR_ID = PO.BANK_NAME_ID THEN REG.REG_NAME END) AS BANK_NAME,
+                        PO.LOADING_NAME AS LOADING_POINT,
+                        PO.PURCHASING_TYPE, PO.VENDOR_ID, PO.AGENCY_ID
+   FROM 
+                           AB_PO_PURCHASE_ORDER PO
+        LEFT JOIN AB_LOOKUP_DETAIL LD ON LD.DET_ID = PO.LOADING_TYPE_ID 
+                                      OR LD.DET_ID = PO.FREIGHT_TYPE_ID 
+                                      OR LD.DET_ID = PO.PAYMENT_MODE_ID 
+                                      OR LD.DET_ID = PO.TRANSACTION_TYPE_ID
+        LEFT JOIN AB_SETUP_REGISTRATION REG ON REG.SR_ID = PO.COMPANY_ID 
+                                            OR REG.SR_ID = PO.SALE_POINT_ID 
+                                            OR REG.SR_ID = PO.VENDOR_ID 
+                                            OR REG.SR_ID = PO.AGENCY_ID 
+                                            OR REG.SR_ID = PO.BANK_NAME_ID
+    GROUP BY
+                PO_ID,PO.PURCHASING_TYPE,PO.LOADING_NAME, PO.VENDOR_ID, PO.AGENCY_ID
+)
+,LOGISTIC_DETAILS AS(
+           SELECT
+                     LOD.INVOICE_NO,
+                     LOD.LO_DET_ID,
+                     LO.TRANSPORT_TYPE,
+                     REG.REG_NAME ||' ('||LO.VEHICLE_NO||') '||LO.BILTY_NO||' - '||LO.DRIVER_NAME TRANSPORT_NAME,
+                     LOD.LO_ID 
+            FROM
+                                AB_LOGISTICS_INFO_DET LOD 
+                         JOIN AB_LOGISTICS_INFO LO ON LO.LO_ID=LOD.LO_ID
+                    LEFT JOIN AB_SETUP_REGISTRATION REG ON REG.SR_ID = LO.TRANSPORT_NAME
+            WHERE
+                       LOD.DET_TYPE='PO LOGISTIC DET'     
+              AND LOD.ORG_ID=:GV_ORG_ID
+              AND LOD.STATUS='Y'
+  GROUP BY
+          LOD.INVOICE_NO,
+          LOD.LO_DET_ID,
+          LO.TRANSPORT_TYPE,
+          REG.REG_NAME ||' ('||LO.VEHICLE_NO||') '||LO.BILTY_NO||' - '||LO.DRIVER_NAME,
+          LOD.LO_ID
+)
+,GRN_DETAILS AS(
+            SELECT
+                     SUM(LOD.RECEIVED_BAGS) GRN_BAGS,
+                     ASR.REG_NAME WAREHOUSE,
+                     LOD.IDS 
+            FROM
+                   AB_LOGISTICS_INFO_DET LOD
+            left JOIN  LOGISTIC_DETAILS LD ON LD.LO_ID=LOD.IDS
+             LEFT JOIN AB_SETUP_REGISTRATION ASR ON ASR.SR_ID = LOD.WAREHOUSE_ID
+            WHERE
+                       LOD.DET_TYPE='PO GRN DET'     
+              AND LOD.ORG_ID=:GV_ORG_ID
+              AND LOD.STATUS='Y'
+      -- and LOD.IDS=5046
+  GROUP BY
+     LOD.IDS,ASR.REG_NAME
+), TAX_PAYMENT_MASTER AS (
+    SELECT
+       ASR.SR_ID AS SUPPLIER_ID,
+       AVR.SR_ID AS EXEMPTION_ID,	
+       ASR.PARTY_NAME AS SUPPLIER_NAME,
+       CASE WHEN AVR.SANCTION_DATE IS NOT NULL THEN 'Yes' ELSE 'No' END EXEMPTION,
+       CASE WHEN TRUNC(AVR.EXP_DATE)>TRUNC(SYSDATE) 
+            THEN  '<span style="background-color: #D4EDDA; color: #155724; padding: 5px 15px; border-radius: 5px; border: 1px solid #C3E6CB; margin: 5px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1); display: inline-block;">Active</span>' 
+            ELSE 
+        '<span style="background-color: #f0acb2; color: #721C24; padding: 5px 15px; border-radius: 5px; border: 1px solid #C3E6CB; margin: 5px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1); display: inline-block;">Inactive <span class="blinking-icon">❌</span></span>'
+       END EXEMPTION_STATUS,
+       CASE WHEN AVR.REG_STATUS = 'Y' THEN 'Enable' ELSE 'Disable' END AS STATUS,
+       INITCAP(AVR.CREATED_BY) || ' (' || TO_CHAR(AVR.CREATED_ON, 'DD-MON-YYYY') || ')' AS CREATED_BY,
+       AVR.REG_REMARKS REMARKS,
+       AVR.SANCTION_DATE ISSUE_DATE,
+       AVR.EXP_DATE EXPIRY_DATE,
+       ASR.NTN,
+       ASR.GST,
+       AVR.BARCODE,
+       CASE WHEN AVR.SANCTION_DATE IS NOT NULL THEN 'Exemption Detail' ELSE NULL END EXEMPTION_DETAIL,
+       'Document' AS DOCUMENT
+  FROM
+       AB_SETUP_REGISTRATION ASR
+   JOIN AB_SETUP_REGISTRATION AVR ON AVR.SR_IDS=ASR.SR_ID AND AVR.REG_TYPE='VENDOR EXEMPTION'
+  WHERE 
+      ASR.REG_TYPE IN ('VENDOR')
+    
+       AND 
+       AVR.ORG_ID = :GV_ORG_ID
+  ORDER BY
+       AVR.CREATED_ON DESC
+),
+TAX_PAYMENT_dETAIL as (
+    SELECT
+     DISTINCT
+       ASR.SR_ID AS EXEMPTION_ID,
+       AVR.SR_ID AS EXEMP_DET_ID,
+         ASR.SR_ID AS SUPPLIER_ID,
+       MAX(ASR.PARTY_NAME) AS SUPPLIER_NAME,
+        ASR.REG_TYPE ,
+   
+       
+       AVR.ITEM_ID AS ITEM_ID,
+      MAX(ITM.ITEM_NAME) AS ITEM_NAME,
+       MAX(AVR.TAX_PER) AS TAX_PER, 
+       MAX(AVR.REG_REMARKS) REMARKS
+  FROM
+       AB_SETUP_REGISTRATION ASR
+  JOIN AB_SETUP_REGISTRATION AVR ON AVR.SR_IDS=ASR.SR_ID AND AVR.REG_TYPE='VENDOR EXEMPTION DET'
+  JOIN  AB_ITEMS_MASTER ITM ON ITM.ITEM_ID=AVR.ITEM_ID
+  WHERE 
+       ASR.REG_TYPE IN ('VENDOR EXEMPTION')
+       AND ASR.ORG_ID = :GV_ORG_ID
+       GROUP BY  ASR.SR_ID,  AVR.ITEM_ID,  AVR.SR_ID,  ASR.REG_TYPE 
+
+),FREIGHT_DETAILS AS(
+            SELECT
+                     LO.LO_ID,
+                     LO.LO_IDS
+            FROM
+                   AB_LOGISTICS_INFO LO
+            JOIN   LOGISTIC_DETAILS LD ON LD.LO_ID=LO.LO_IDS
+            WHERE
+                       LO_TYPE='PO FREIGHT'     
+              AND ORG_ID=:GV_ORG_ID
+              AND STATUS='Y'
+  GROUP BY
+     LO.LO_ID,
+     LO.LO_IDS
+),
+
+
+TAX_PAYMENT_MASTERS AS (
+    SELECT
+        ASR.SR_ID AS SUPPLIER_ID,
+        AVR.SR_ID AS EXEMPTION_ID,	
+        ASR.PARTY_NAME AS SUPPLIER_NAME,
+        CASE WHEN AVR.SANCTION_DATE IS NOT NULL THEN 'Yes' ELSE 'No' END AS EXEMPTION,
+        CASE 
+            WHEN TRUNC(AVR.EXP_DATE) > TRUNC(SYSDATE) THEN  
+                '<span style="background-color: #D4EDDA; color: #155724; padding: 5px 15px; border-radius: 5px; border: 1px solid #C3E6CB; margin: 5px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1); display: inline-block;">Active</span>' 
+            ELSE 
+                '<span style="background-color: #f0acb2; color: #721C24; padding: 5px 15px; border-radius: 5px; border: 1px solid #C3E6CB; margin: 5px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1); display: inline-block;">Inactive <span class="blinking-icon">❌</span></span>'
+        END AS EXEMPTION_STATUS,
+        CASE WHEN AVR.REG_STATUS = 'Y' THEN 'Enable' ELSE 'Disable' END AS STATUS,
+        INITCAP(AVR.CREATED_BY) || ' (' || TO_CHAR(AVR.CREATED_ON, 'DD-MON-YYYY') || ')' AS CREATED_BY,
+        AVR.REG_REMARKS AS REMARKS,
+        AVR.SANCTION_DATE AS ISSUE_DATE,
+        AVR.EXP_DATE AS EXPIRY_DATE,
+        ASR.NTN,
+        ASR.GST,
+        AVR.BARCODE,
+        CASE WHEN AVR.SANCTION_DATE IS NOT NULL THEN 'Exemption Detail' ELSE NULL END AS EXEMPTION_DETAIL,
+        'Document' AS DOCUMENT
+    FROM AB_SETUP_REGISTRATION ASR
+    JOIN AB_SETUP_REGISTRATION AVR 
+        ON AVR.SR_IDS = ASR.SR_ID 
+       AND AVR.REG_TYPE = 'VENDOR EXEMPTION'
+    WHERE 
+        ASR.REG_TYPE = 'VENDOR'
+        AND TRUNC(AVR.EXP_DATE) > TRUNC(SYSDATE)
+        AND AVR.ORG_ID = :GV_ORG_ID
+),
+TAX_PAYMENT_DETAILS AS (
+    SELECT
+        ASR.SR_ID AS EXEMPTION_ID,
+        AVR.SR_ID AS EXEMP_DET_ID,
+        CASE WHEN AVR.REG_STATUS = 'Y' THEN 'Enable' ELSE 'Disable' END AS STATUS,
+        INITCAP(AVR.CREATED_BY) || ' (' || TO_CHAR(AVR.CREATED_ON, 'DD-MON-YYYY') || ')' AS CREATED_BY,
+        AVR.ITEM_ID,
+        ITM.ITEM_NAME || ' (' || ITM.PACKING_SIZE || ' ' || ITM.UNIT || ' ' || ITM.PACKING || ')' AS ITEM_NAME,
+        AVR.TAX_PER || '(%)' AS TAX_PER, 
+        AVR.REG_REMARKS
+    FROM AB_SETUP_REGISTRATION ASR
+    JOIN AB_SETUP_REGISTRATION AVR 
+        ON AVR.SR_IDS = ASR.SR_ID 
+       AND AVR.REG_TYPE = 'VENDOR EXEMPTION DET'
+    JOIN AB_ITEMS_MASTER ITM 
+        ON ITM.ITEM_ID = AVR.ITEM_ID
+    WHERE 
+        ASR.REG_TYPE = 'VENDOR EXEMPTION'
+        AND ASR.ORG_ID = :GV_ORG_ID
+),
+EX AS (
+    SELECT  
+        MAX(TPM.EXEMPTION_ID) AS EXEMPTION_ID,
+        MAX(TPM.SUPPLIER_NAME) AS SUPPLIER_NAME,
+        MAX(TPM.NTN) AS NTN,
+        MAX(TPM.GST) AS GST,
+        MAX(EXEMPTION) AS EXEMPTION,
+        MAX(TPM.EXEMPTION_STATUS) AS EXEMPTION_STATUS,
+        MAX(TPM.STATUS) AS STATUS,
+        MAX(TPM.CREATED_BY) AS CREATED_BY,
+        MAX(TPM.ISSUE_DATE) AS ISSUE_DATE,
+        MAX(TPM.EXPIRY_DATE) AS EXPIRY_DATE,
+        MAX(TPM.REMARKS) AS MASTER_REMARKS,
+        MAX(TPM.BARCODE) AS BARCODE,
+        TPD.ITEM_ID AS ITEM_ID,
+        MAX(TPD.ITEM_NAME) AS ITEM_NAME,
+        MAX(TPD.TAX_PER) AS TAX_PER
+    FROM 
+        TAX_PAYMENT_MASTER TPM 
+    LEFT JOIN 
+        TAX_PAYMENT_DETAIL TPD 
+        ON TPD.EXEMPTION_ID = TPM.EXEMPTION_ID
+        and TRUNC(TPM.EXPIRY_DATE) > TRUNC(SYSDATE)
+    
+    GROUP BY TPD.ITEM_ID 
+)
+
+    SELECT
+         -- DISTINCT C.*
+          VENDOR_NAME,
+          AGENCY_NAME,
+          INVOICE_DATE,
+          VENDOR_ID,
+          AGENCY_ID,
+          ITEM_ID,
+          TAX_PER,
+          ITEM_NAME,
+          INVOICE_BAGS,
+          ISSUE_DATE,
+          PER_BAGS,
+          INVOICE_NO,
+          INV_NET_AMOUNT,
+          EXEMPTION_STATUS,
+          SUM(TAX_LIABILITY) AS TAX_LIABILITY,
+       -- SUM(TAX_LIABILITY)  TOTAL_TAX_LIABILITY, 
+          LESS_EXAMPTION_INVOICE_VALUE,
+          INV_CREATED_BY--,
+        -- 'tax ability' as tax_ability_minus_total_approve_amount
+
+    FROM(
+    SELECT  
+               
+                          INITCAP(VENDOR_NAME) AS VENDOR_NAME,
+                             INITCAP(AGENCY_NAME) AS AGENCY_NAME,
+                             MAX(INITCAP(POL.PURCHASING_TYPE)) AS PURCHASING_TYPE,
+                             MAX(TO_CHAR(INV.TRANSACTION_DATE, 'DD-MON-YYYY')) AS INVOICE_DATE,
+                             MAX(POL.VENDOR_ID) AS VENDOR_ID,
+                              MAX(INV.PO_ID) AS  INVOICE_NO,
+                             MAX(POL.AGENCY_ID) AS AGENCY_ID,
+                             MAX(PO.ITEM_ID) AS ITEM_ID,
+                             SUM(INVD.CHANGE_BAGS) AS INVOICE_BAGS,
+                             MAX(EX.ITEM_ID)AS TAX_ITEM_ID,
+                             MAX(EX.ISSUE_DATE) AS ISSUE_DATE,
+                            MAX(EX.EXEMPTION_STATUS) AS EXEMPTION_STATUS,
+                             MAX(TO_CHAR(NVL(EX.TAX_PER, 0)) || '(%)') AS TAX_PER,  -- Fixed type conversion and added comma
+                             INITCAP(PO.ITEM_NAME) AS ITEM_NAME,
+                            
+                             MAX(ROUND(NVL(PO.PER_BAGS, 0))) AS PER_BAGS,
+                             SUM(ROUND(NVL(PO.PER_BAGS, 0) * NVL(INVD.CHANGE_BAGS, 0), 2)) AS INV_NET_AMOUNT,
+                              (SUM(ROUND(NVL(PO.PER_BAGS, 0) * NVL(INVD.CHANGE_BAGS, 0), 2))) * (MAX(NVL(EX.TAX_PER, 0)))  / 100 AS TAX_LIABILITY,
+
+                            SUM(ROUND(NVL(PO.PER_BAGS, 0) * NVL(INVD.CHANGE_BAGS, 0), 2)) 
+                              - ((MAX(NVL(EX.TAX_PER, 0)) * SUM(ROUND(NVL(PO.PER_BAGS, 0) * NVL(INVD.CHANGE_BAGS, 0), 2))) / 100) AS LESS_EXAMPTION_INVOICE_VALUE,
+                             MAX(INITCAP(INV.CREATED_BY) || ' (' || TO_CHAR(INV.CREATED_ON, 'DD-MON-YYYY') || ')') AS INV_CREATED_BY
+
+               
+
+                    FROM
+                   PURCHASE_ORDER  PO
+             JOIN  PO_LOV_DATA POL  ON POL.PO_ID=PO.PO_ID
+             JOIN  AB_PO_PURCHASE_ORDER_DET INVD ON INVD.IDS=PO.POD_ID
+             JOIN  AB_PO_PURCHASE_ORDER  INV ON INV.PO_ID = INVD.PO_ID
+    LEFT JOIN  LOGISTIC_DETAILS LOD ON LOD.INVOICE_NO=INVD.DET_ID  
+    --LEFT JOIN  LOGISTIC_DETAILS LOD ON LOD.INVOICE_NO=INVD.DET_ID  
+    LEFT JOIN  GRN_DETAILS GD ON GD.IDS=LOD.LO_DET_ID
+    LEFT JOIN  FREIGHT_DETAILS FD ON FD.LO_IDS=LOD.LO_ID
+    left join EX ON EX.ITEM_ID =  PO.ITEM_ID
+    
+    WHERE
+                  DET_TYPE='PURCHASE INVOICE DET'   
+                  and POL.PURCHASING_TYPE = 'COMPANY'
+                  AND EX.EXEMPTION_STATUS IS NOT NULL
+        AND  INVD.STATUS = 'Y'
+        AND  INVD.ORG_ID=:GV_ORG_ID
+
+AND (
+    TRUNC(INV.TRANSACTION_DATE) BETWEEN 
+        NVL(TO_DATE(:P633_FROM_DATES,'DD-MON-YYYY'), TRUNC(INV.TRANSACTION_DATE)) 
+    AND 
+        NVL(TO_DATE(:P633_TO_DATES,'DD-MON-YYYY'), TRUNC(INV.TRANSACTION_DATE))
+    
+    OR
+    
+    TRUNC(EX.ISSUE_DATE) BETWEEN 
+        NVL(TO_DATE(:P633_FROM_DATES,'DD-MON-YYYY'), TRUNC(EX.ISSUE_DATE)) 
+    AND 
+        NVL(TO_DATE(:P633_TO_DATES,'DD-MON-YYYY'), TRUNC(EX.ISSUE_DATE))
+)
+
+             
+             AND POL.AGENCY_ID = NVL(:P633_AGENCY_CPRN,POL.AGENCY_ID)
+               GROUP BY   
+               INITCAP(VENDOR_NAME),
+    INITCAP(AGENCY_NAME),
+    INITCAP(PO.ITEM_NAME))C 
+    GROUP BY   
+    VENDOR_NAME,
+     VENDOR_NAME,
+          AGENCY_NAME,
+          INVOICE_DATE,
+          VENDOR_ID,
+          AGENCY_ID,
+          ITEM_ID,
+          TAX_PER,
+          ITEM_NAME,
+          INVOICE_NO,
+          INVOICE_BAGS,
+          PER_BAGS,
+          INV_NET_AMOUNT,
+          EXEMPTION_STATUS,
+       ISSUE_DATE,
+          LESS_EXAMPTION_INVOICE_VALUE,
+          INV_CREATED_BY--, 
+    
+  ) LOOP
+    htp.p('<tr>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.VENDOR_NAME || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.AGENCY_NAME || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.ITEM_NAME || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || TO_CHAR(rec.INVOICE_BAGS, '999G999G999G999G990D00') || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || TO_CHAR(rec.INV_NET_AMOUNT, '999G999G999G999G990D00') || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.TAX_PER || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || TO_CHAR(rec.TAX_LIABILITY, '999G999G999G999G990D00') || '</td>' ||
+          '</tr>');
+ --   v_total_bags := v_total_bags + rec.AVAILABLE_BAGS;
+  v_inv_bags := v_inv_bags + rec.INVOICE_BAGS;
+  v_inv_net_amount := v_inv_net_amount + rec.INV_NET_AMOUNT;
+  v_tax_liability := v_tax_liability + rec.TAX_LIABILITY;
+  END LOOP;
+
+  -- Total row
+  htp.p('<tr style="font-weight: bold; background-color: #f8f8f8;">');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;" colspan="3"></td>');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;" colspan="1">' || TO_CHAR(v_inv_bags, '999G999G999G999G990D00') || '</td>');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;" colspan="1">' || TO_CHAR(v_inv_net_amount, '999G999G999G999G990D00') || '</td>');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;" colspan="1"></td>');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;" colspan="1">' || TO_CHAR(v_tax_liability, '999G999G999G999G990D00') || '</td>');
+  htp.p('</tr>');
+
+
+
+FOR mac IN (
+    WITH FUND_REQUISITION_APPROVAL AS(
+SELECT
+                     FT.TR_ID REQ_ID, FTD.TRD_ID REQ_DET_ID,COA.COA_ID, NVL(COA.GL_CODE||'-'||COA.ACCOUNT_TITLE,ASR.PARTY_NAME) DEBIT_ACCOUNT, COA.ACCOUNT_TITLE, COA.GL_CODE,
+                     UM_NAME DEPARTMENT,FT.AGENCY_ID, ASR.PARTY_NAME,    AGN.SR_ID,  MAX(CASE WHEN LD.DET_ID=FT.FUND_TYPE_ID THEN INITCAP(LD.LOOKUP_DET_NAME) END) AS NATURE_OF_FUND,
+                   '<span style="background-color: #FFF3CD; color: #856404; padding: 5px 15px; ...">' ||TO_CHAR(NVL(FTD.TRD_AMOUNT, 0) + NVL(FTD.PROFIT_AMOUNT, 0), '999G999G999G999G990') || '</span>' AS REQUISITION_AMOUNT
+        FROM AB_FIN_TRANSACTION FT  JOIN  AB_FIN_TRANSACTION_DET FTD ON FTD.TR_ID=FT.TR_ID LEFT JOIN  AB_LOOKUP_DETAIL LD ON  LD.DET_ID=FT.FUND_TYPE_ID  LEFT JOIN AB_FIN_COA COA ON COA.COA_ID=FTD.COA_IDD LEFT JOIN  AB_SETUP_REGISTRATION ASR ON ASR.SR_ID = FT.PARTY_ID
+         LEFT JOIN  AB_UM_SETUP_REGISTRATION  DPT ON DPT.UM_ID=FT.DEPARTMENT_ID LEFT JOIN AB_SETUP_REGISTRATION AGN ON AGN.SR_ID = FT.AGENCY_ID   WHERE
+                      FT.TR_TYPE=623  AND FT.ORG_ID=:GV_ORG_ID  AND FT.STATUS='Y' AND UM_NAME = 'TAX DEPARTMENT'--  AND AGN.REG_TYPE = 'AGENCY' 
+                         GROUP BY FT.TR_ID ,FTD.ITEM_IDD,FT.AGENCY_ID ,ASR.PARTY_NAME,  UM_NAME , FTD.TRD_ID,AGN.SR_ID,  INITCAP(FT.CREATED_BY ||' ('|| TO_CHAR(FT.CREATED_ON,'DD-MON-YYYY') ||')' ) ,
+                    ACCOUNT_TITLE,COA.COA_ID,COA.GL_CODE, '<span style="background-color: #FFF3CD; color: #856404; padding: 5px 15px; ...">' ||TO_CHAR(NVL(FTD.TRD_AMOUNT, 0) + NVL(FTD.PROFIT_AMOUNT, 0), '999G999G999G999G990') || '</span>'
+), agency_name as(    
+SELECT AFC.COA_ID, AFTD.COA_IDD,SR_ID,REG_TYPE, REG_NAME, ACCOUNT_TITLE, GL_CODE, SUB_ACCOUNT_TYPE, APPROVED_STATUS
+FROM AB_SETUP_REGISTRATION ASR JOIN AB_FIN_COA AFC ON AFC.SUB_ACCOUNT_TYPE = ASR.SR_ID left join AB_FIN_TRANSACTION_DET AFTD ON AFTD.COA_IDD =  AFC.COA_ID WHERE REG_TYPE = 'AGENCY'
+)
+,BANK_NAME AS(
+SELECT    AST.REG_NAME||' - '|| ASM.REG_DISCRIPTION  BANK_NAME  , ASM.SR_ID  BANK_ID  FROM   AB_SETUP_REGISTRATION ASM  JOIN  AB_SETUP_REGISTRATION AST ON AST.SR_ID = ASM.BANK_ID AND AST.REG_TYPE = 'BANK'
+    WHERE 
+         ASM.REG_TYPE  IN ('BANK LOV','624') AND ASM.ORG_ID = :GV_ORG_ID  ORDER BY   ASM.SR_ID DESC)
+,DEBIT_AMOUNT AS(
+    SELECT
+                TRD_IDS TRD_ID, TRD.COA_IDD, COA.COA_ID, COA.GL_CODE||'-'||COA.ACCOUNT_TITLE ACCOUNT_TITLE, SUM(DR_AMOUNT) DR_AMOUNT , ASR.SR_ID, ASR.REG_NAME FROM AB_FIN_TRANSACTION_DET TRD
+          JOIN AB_FIN_TRANSACTION TR ON TR.TR_ID=TRD.TR_ID JOIN AB_FIN_COA COA ON COA.COA_ID=TRD.COA_IDD JOIN AB_SETUP_REGISTRATION ASR ON ASR.SR_ID = COA.SUB_ACCOUNT_TYPE    WHERE
+                  TRD_TYPE=628 AND TRD.ORG_ID=:GV_ORG_ID AND TRD.STATUS='Y' AND ASR.REG_TYPE = 'AGENCY'    AND TRD.DR_AMOUNT IS NOT NULL
+    GROUP BY   TRD_IDS,TRD.COA_IDD,COA.GL_CODE||'-'||COA.ACCOUNT_TITLE ,COA.COA_ID,  ASR.SR_ID,   ASR.REG_NAME)
+
+        SELECT     --  DA.ACCOUNT_TITLE,SUM(TRD.TRD_AMOUNT - NVL(DA.DR_AMOUNT,0)) AS TOTAL_REMAINING_AMOUNT,
+                    SUM(TRD.TRD_AMOUNT) AS TOTAL_APPROVED_AMOUNT,
+                    DA.SR_ID  
+        FROM      
+                   FUND_REQUISITION_APPROVAL RA   JOIN  AB_FIN_TRANSACTION_DET TRD ON TRD.TRD_IDS=RA.REQ_DET_ID  JOIN  AB_FIN_COA COA ON COA.COA_ID=TRD.COA_IDD  JOIN   AB_LOOKUP_DETAIL LD ON LD.DET_ID=TRD.TRD_TYPE_ID LEFT JOIN  DEBIT_AMOUNT DA ON DA.TRD_ID=TRD.TRD_ID
+        WHERE
+                       TRD.TRD_TYPE=632 AND TRD.ORG_ID=:GV_ORG_ID  AND TRD.STATUS='Y' --AND TRUNC(TRD.TRD_DATE) BETWEEN NVL(TO_DATE(:P633_FROM_DATE, 'DD-MON-YYYY'), TRUNC(TRD.TRD_DATE)) AND NVL(TO_DATE(:P633_FROM_DATES, 'DD-MON-YYYY'), TRUNC(TRD.TRD_DATE)) --AND DA.COA_ID = NVL(:P614_DEBIT_ACCOUNT,DA.COA_ID)
+              and (TRD.TRD_AMOUNT - NVL(DA.DR_AMOUNT,0)) =0   and DA.SR_ID = :P633_AGENCY_CPRN     group BY    DA.SR_ID
+
+) LOOP
+
+
+ --   v_total_bags := v_total_bags + rec.AVAILABLE_BAGS;
+  v_cprn_payments := v_cprn_payments + mac.TOTAL_APPROVED_AMOUNT;
+
+
+END LOOP;
+
+  -- Total row
+  htp.p('<tr style="font-weight: bold; background-color: #f8f8f8;">');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;" colspan="1">Total Tax Liability</td>');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;" colspan="1">' || TO_CHAR(v_tax_liability, '999G999G999G999G990D00') || '</td>');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;" colspan="1">Total CPRN Payments</td>');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;" colspan="1">' || TO_CHAR(v_cprn_payments, '999G999G999G999G990D00') || '</td>');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;" colspan="2">Payable Liability</td>');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;" colspan="1">' || TO_CHAR(v_tax_liability - v_cprn_payments, '999G999G999G999G990D00') || '</td>');
+  htp.p('</tr>');
+
+  htp.p('</table>');
+  htp.p('</div>'); -- close all_reports
+END;
