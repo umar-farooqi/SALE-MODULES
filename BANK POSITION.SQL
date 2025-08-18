@@ -7,7 +7,7 @@ SELECT
     OPENING_AMOUNT,
     SOURCE,
 
-    -- Debit: Receiving + Transfer In
+    
     CASE 
        -- WHEN SOURCE = 'Opening' THEN NVL(OPENING_AMOUNT, 0)
         WHEN SOURCE = 'Receiving' THEN RECEIVING_AMOUNT
@@ -15,14 +15,14 @@ SELECT
         ELSE 0
     END AS DEBIT_AMOUNT,
 
-    -- Credit: Approved + Transfer Out
+    
     CASE 
         WHEN SOURCE = 'Approved' THEN APPROVED_AMOUNT
         WHEN SOURCE = 'Transfer Out' THEN TRANSFER_OUT_AMOUNT
         ELSE 0
     END AS CREDIT_AMOUNT,
 
-    -- ✅ Running Balance
+  
     SUM(
         CASE 
             WHEN SOURCE = 'Opening' THEN NVL(OPENING_AMOUNT, 0)
@@ -50,7 +50,6 @@ FROM (
         TRANSFER_OUT_AMOUNT,
         SOURCE,
 
-        -- ✅ Row Number: Opening always 0, others ranked by transaction date + source priority
         CASE 
             WHEN SOURCE = 'Opening' THEN 0
             ELSE ROW_NUMBER() OVER (
@@ -68,10 +67,10 @@ FROM (
 
     FROM ( 
 
-        -- 🔽 0. Opening
-        SELECT 
+        -- 0. Opening
+       SELECT 
             AC.ACCOUNT_ID,
-            AC.ACCOUNT_NAME,
+            NULL AS ACCOUNT_NAME,
             NULL AS TRANSACTION_DATE,
            -- FT.TR_DATE AS TRANSACTION_DATE,
            NULL TR_DESCRIPTION,
@@ -84,18 +83,31 @@ FROM (
         FROM AB_FIN_TRANSACTION FT
         LEFT JOIN AB_FIN_TRANSACTION_DET FTD ON FTD.TR_ID = FT.TR_ID AND FTD.STATUS = 'Y'
         LEFT JOIN ( 
-            SELECT BNK.REG_NAME || ' - ' || ACT.REG_DISCRIPTION AS ACCOUNT_NAME,
-                   ACT.SR_ID AS ACCOUNT_ID
-            FROM AB_SETUP_REGISTRATION ACT
-            JOIN AB_SETUP_REGISTRATION BNK ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
-            WHERE ACT.REG_TYPE = '624' AND ACT.ORG_ID = :GV_ORG_ID AND ACT.REG_STATUS = 'Y'
+              SELECT   
+                  MAX(AFC.ACCOUNT_TITLE) AS ACCOUNT_NAME,
+                  --||' - '|| ACT.REG_DISCRIPTION    AS ACCOUNT_NAME  ,
+                    ACT.SR_ID ACCOUNT_ID   ,
+                    ACT.BANK_ID                  
+               FROM   AB_FIN_COA AFC
+              LEFT  JOIN  AB_SETUP_REGISTRATION ACT ON ACT.SR_ID = AFC.SUB_ACCOUNT_TYPE
+              LEFT JOIN AB_SETUP_REGISTRATION BNK  ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
+            WHERE 
+                   ACT.REG_TYPE = '624'
+               AND ACT.ORG_ID = :GV_ORG_ID
+                AND ACT.REG_STATUS='Y'
+            
+                 GROUP BY 
+                   ACT.SR_ID   ,
+                    ACT.BANK_ID 
         ) AC ON AC.ACCOUNT_ID = FT.ACCOUNT_ID
         WHERE TR_TYPE = 625
           AND FT.ORG_ID = :GV_ORG_ID
           AND FT.STATUS = 'Y'
-           AND FT.ACCOUNT_ID = NVL(:P510_ID, FT.ACCOUNT_ID)
+           AND FT.ACCOUNT_ID = :P510_ID
         -- AND FT.TR_DATE BETWEEN NVL(TO_DATE(:P510_FROM_DATE, 'DD-MON-YYYY'), FT.TR_DATE)
                         ---  AND NVL(TO_DATE(:P510_TO_DATE, 'DD-MON-YYYY'), TRUNC(FT.TR_DATE))
+
+                       
          
 
         UNION ALL
@@ -117,24 +129,28 @@ FROM (
         AB_FIN_TRANSACTION REC
         left JOIN AB_FIN_TRANSACTION_DET RECD ON RECD.TR_ID = REC.TR_ID
         left JOIN ( 
-        SELECT   
-        BNK.REG_NAME || ' - ' || ACT.REG_DISCRIPTION AS ACCOUNT_NAME,
-        ACT.SR_ID AS ACCOUNT_ID,
-        ACT.BANK_ID
-    FROM 
-        AB_SETUP_REGISTRATION ACT
-        JOIN AB_SETUP_REGISTRATION BNK ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
-    WHERE 
-        ACT.REG_TYPE = '624'
-        AND ACT.ORG_ID = :GV_ORG_ID
-        AND ACT.REG_STATUS = 'Y') AN ON AN.ACCOUNT_ID = REC.ACCOUNT_ID
+           SELECT   
+                MAX(AFC.ACCOUNT_TITLE) AS ACCOUNT_NAME,
+                    ACT.SR_ID ACCOUNT_ID   ,
+                    ACT.BANK_ID                  
+               FROM   AB_FIN_COA AFC
+              LEFT  JOIN  AB_SETUP_REGISTRATION ACT ON ACT.SR_ID = AFC.SUB_ACCOUNT_TYPE
+              LEFT JOIN AB_SETUP_REGISTRATION BNK  ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
+            WHERE 
+                   ACT.REG_TYPE = '624'
+               AND ACT.ORG_ID = :GV_ORG_ID
+                
+                AND ACT.REG_STATUS='Y'
+                   GROUP BY 
+                   ACT.SR_ID   ,
+                    ACT.BANK_ID ) AN ON AN.ACCOUNT_ID = REC.ACCOUNT_ID
         
     WHERE
         REC.TR_TYPE = 626
         AND REC.ORG_ID = :GV_ORG_ID
         AND REC.STATUS = 'Y'
         AND RECD.STATUS = 'Y'
-          AND REC.ACCOUNT_ID = :P510_ID
+           AND REC.ACCOUNT_ID = :P510_ID
           AND TRUNC(REC.TR_DATE) BETWEEN NVL(TO_DATE(:P510_FROM_DATE, 'DD-MON-YYYY'), TRUNC(REC.TR_DATE))
                                     AND NVL(TO_DATE(:P510_TO_DATE, 'DD-MON-YYYY'), TRUNC(REC.TR_DATE))
 
@@ -144,38 +160,47 @@ FROM (
 
         UNION ALL
 
-        -- 🔽 2. Transfer In
-            SELECT 
+        -- 2. Transfer In
+
+SELECT 
             AC.ACCOUNT_ID,
             AC.ACCOUNT_NAME,
             FT.TR_DATE AS TRANSACTION_DATE,
-             'Funds transfer from ' || MAX(CASE WHEN AC.ACCOUNT_ID=FTD.FROM_ACCOUNT_ID AND AC.REG_TYPE IN ('BANK LOV','624') THEN AC.ACCOUNT_NAME   END) AS TR_DESCRIPTION,
+          --  'Funda transfer from '|| AC.ACCOUNT_NAME  AS TR_DESCRIPTION,
+    'Funds transfer from ' || MAX(CASE WHEN AC.ACCOUNT_ID=FTD.TO_ACCOUNT_ID AND AC.REG_TYPE IN ('BANK LOV','624') THEN AC.ACCOUNT_NAME   END) AS TR_DESCRIPTION,
+
+       
              NULL AS OPENING_AMOUNT,
             NULL AS RECEIVING_AMOUNT,
             NVL(FTD.TRANS_AMOUNT, 0) AS TRANSFER_IN_AMOUNT,
-           
             NULL AS APPROVED_AMOUNT,
             NULL AS TRANSFER_OUT_AMOUNT,
             'Transfer In' AS SOURCE
         FROM AB_FIN_TRANSACTION FT
         JOIN AB_FIN_TRANSACTION_DET FTD ON FTD.TR_ID = FT.TR_ID AND FTD.STATUS = 'Y'
         JOIN (
-            SELECT BNK.REG_NAME || ' - ' || ACT.REG_DISCRIPTION AS ACCOUNT_NAME,
-        
-         ACT.REG_TYPE,
-                   ACT.SR_ID AS ACCOUNT_ID
-            FROM AB_SETUP_REGISTRATION ACT
-            JOIN AB_SETUP_REGISTRATION BNK ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
-            WHERE ACT.REG_TYPE = '624' AND ACT.ORG_ID = :GV_ORG_ID AND ACT.REG_STATUS = 'Y'
-        ) AC ON AC.ACCOUNT_ID IN (FTD.TO_ACCOUNT_ID, FTD.FROM_ACCOUNT_ID)
+              SELECT   
+                 MAX(AFC.ACCOUNT_TITLE) AS ACCOUNT_NAME,
+                 ACT.REG_TYPE,
+                    ACT.SR_ID ACCOUNT_ID   ,
+                    ACT.BANK_ID                  
+               FROM   AB_FIN_COA AFC
+              LEFT  JOIN  AB_SETUP_REGISTRATION ACT ON ACT.SR_ID = AFC.SUB_ACCOUNT_TYPE
+              LEFT JOIN AB_SETUP_REGISTRATION BNK  ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
+            WHERE 
+                   ACT.REG_TYPE = '624'
+               AND ACT.ORG_ID = :GV_ORG_ID
+                AND ACT.REG_STATUS='Y'
+                   GROUP BY   
+                   ACT.SR_ID ,ACT.REG_TYPE,
+                    ACT.BANK_ID 
+        ) AC ON AC.ACCOUNT_ID IN( FTD.TO_ACCOUNT_ID, FTD.FROM_ACCOUNT_ID)
         WHERE FT.TR_TYPE = 622 AND FT.ORG_ID = :GV_ORG_ID AND FT.STATUS = 'Y'
           AND FTD.TO_ACCOUNT_ID = :P510_ID
           AND TRUNC(FT.TR_DATE) BETWEEN NVL(TO_DATE(:P510_FROM_DATE, 'DD-MON-YYYY'), TRUNC(FT.TR_DATE))
                                     AND NVL(TO_DATE(:P510_TO_DATE, 'DD-MON-YYYY'), TRUNC(FT.TR_DATE))
-
-
-                                    GROUP BY 
-    AC.ACCOUNT_ID,
+    GROUP BY 
+     AC.ACCOUNT_ID,
     AC.ACCOUNT_NAME,
     FT.TR_DATE,
     FTD.TR_DESCRIPTION,
@@ -183,35 +208,9 @@ FROM (
     FTD.TRD_AMOUNT,
     FTD.TRANS_AMOUNT
 
-
--- SELECT 
---             AC.ACCOUNT_ID,
---             AC.ACCOUNT_NAME,
---             FT.TR_DATE AS TRANSACTION_DATE,
---              FTD.TR_DESCRIPTION || ' Transcation Amount ('||NVL(TO_NUMBER(REGEXP_REPLACE(FTD.RECEIVING_AMOUNT, '[^0-9.]', '')),FTD.TRD_AMOUNT)||')' TR_DESCRIPTION,
---              NULL AS OPENING_AMOUNT,
---             NULL AS RECEIVING_AMOUNT,
---             NVL(FTD.TRANS_AMOUNT, 0) AS TRANSFER_IN_AMOUNT,
---             NULL AS APPROVED_AMOUNT,
---             NULL AS TRANSFER_OUT_AMOUNT,
---             'Transfer In' AS SOURCE
---         FROM AB_FIN_TRANSACTION FT
---         JOIN AB_FIN_TRANSACTION_DET FTD ON FTD.TR_ID = FT.TR_ID AND FTD.STATUS = 'Y'
---         JOIN (
---             SELECT BNK.REG_NAME || ' - ' || ACT.REG_DISCRIPTION AS ACCOUNT_NAME,
---                    ACT.SR_ID AS ACCOUNT_ID
---             FROM AB_SETUP_REGISTRATION ACT
---             JOIN AB_SETUP_REGISTRATION BNK ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
---             WHERE ACT.REG_TYPE = '624' AND ACT.ORG_ID = :GV_ORG_ID AND ACT.REG_STATUS = 'Y'
---         ) AC ON AC.ACCOUNT_ID = FTD.TO_ACCOUNT_ID
---         WHERE FT.TR_TYPE = 622 AND FT.ORG_ID = :GV_ORG_ID AND FT.STATUS = 'Y'
---           AND FTD.TO_ACCOUNT_ID = :P510_ID
---           AND TRUNC(FT.TR_DATE) BETWEEN NVL(TO_DATE(:P510_FROM_DATE, 'DD-MON-YYYY'), TRUNC(FT.TR_DATE))
---                                     AND NVL(TO_DATE(:P510_TO_DATE, 'DD-MON-YYYY'), TRUNC(FT.TR_DATE))
-
         UNION ALL
 
-        -- 🔽 3. Approved
+        --  3. Approved
         SELECT 
             AC.ACCOUNT_ID,
             AC.ACCOUNT_NAME,
@@ -226,11 +225,21 @@ FROM (
         FROM AB_FIN_TRANSACTION_DET TRD
         JOIN AB_FIN_COA COA ON COA.COA_ID = TRD.COA_IDD
         JOIN (
-            SELECT BNK.REG_NAME || ' - ' || ACT.REG_DISCRIPTION AS ACCOUNT_NAME,
-                   ACT.SR_ID AS ACCOUNT_ID
-            FROM AB_SETUP_REGISTRATION ACT
-            JOIN AB_SETUP_REGISTRATION BNK ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
-            WHERE ACT.REG_TYPE = '624' AND ACT.ORG_ID = :GV_ORG_ID AND ACT.REG_STATUS = 'Y'
+               SELECT   
+                 MAX(AFC.ACCOUNT_TITLE) AS ACCOUNT_NAME,
+                  --||' - '|| ACT.REG_DISCRIPTION    AS ACCOUNT_NAME  ,
+                    ACT.SR_ID ACCOUNT_ID   ,
+                    ACT.BANK_ID                  
+               FROM   AB_FIN_COA AFC
+              LEFT  JOIN  AB_SETUP_REGISTRATION ACT ON ACT.SR_ID = AFC.SUB_ACCOUNT_TYPE
+              LEFT JOIN AB_SETUP_REGISTRATION BNK  ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
+            WHERE 
+                   ACT.REG_TYPE = '624'
+               AND ACT.ORG_ID = :GV_ORG_ID
+                AND ACT.REG_STATUS='Y'
+                   GROUP BY 
+                   ACT.SR_ID   ,
+                    ACT.BANK_ID 
         ) AC ON AC.ACCOUNT_ID = COA.SUB_ACCOUNT_TYPE
         WHERE TRD.TRD_TYPE = 632 AND TRD.ORG_ID = :GV_ORG_ID AND TRD.STATUS = 'Y'
           AND COA.SUB_ACCOUNT_TYPE = :P510_ID
@@ -239,14 +248,15 @@ FROM (
 
         UNION ALL
 
-        -- 🔽 4. Transfer Out
+        --  4. Transfer Out
         SELECT 
             AC.ACCOUNT_ID,
             AC.ACCOUNT_NAME,
             FT.TR_DATE AS TRANSACTION_DATE,
-            'Funds transfer from ' || MAX(CASE WHEN AC.ACCOUNT_ID=FTD.FROM_ACCOUNT_ID AND AC.REG_TYPE IN ('BANK LOV','624') THEN AC.ACCOUNT_NAME   END)
-              || ' to '  ||
-              MAX(CASE WHEN AC.ACCOUNT_ID=FTD.TO_ACCOUNT_ID AND AC.REG_TYPE IN ('BANK LOV','624') THEN AC.ACCOUNT_NAME   END) AS TR_DESCRIPTION,
+          -- 'Funda transfer from '|| AC.ACCOUNT_NAME  AS TR_DESCRIPTION, 
+
+       'Funds transfer from ' || CASE WHEN AC.ACCOUNT_ID=FTD.FROM_ACCOUNT_ID AND AC.REG_TYPE IN ('BANK LOV','624') THEN AC.ACCOUNT_NAME   END AS TR_DESCRIPTION,
+
             NULL AS OPENING_AMOUNT,
             NULL AS RECEIVING_AMOUNT,
             NULL AS TRANSFER_IN_AMOUNT,
@@ -256,27 +266,39 @@ FROM (
         FROM AB_FIN_TRANSACTION FT
         JOIN AB_FIN_TRANSACTION_DET FTD ON FTD.TR_ID = FT.TR_ID AND FTD.STATUS = 'Y'
         JOIN (
-            SELECT BNK.REG_NAME || ' - ' || ACT.REG_DISCRIPTION AS ACCOUNT_NAME, ACT.REG_TYPE,
-                   ACT.SR_ID AS ACCOUNT_ID
-            FROM AB_SETUP_REGISTRATION ACT
-            JOIN AB_SETUP_REGISTRATION BNK ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
-            WHERE ACT.REG_TYPE = '624' AND ACT.ORG_ID = :GV_ORG_ID AND ACT.REG_STATUS = 'Y'
+             SELECT   
+                  MAX(AFC.ACCOUNT_TITLE) AS ACCOUNT_NAME,
+                   ACT.REG_TYPE,
+                    ACT.SR_ID ACCOUNT_ID   ,
+                    ACT.BANK_ID                  
+               FROM   AB_FIN_COA AFC
+              LEFT  JOIN  AB_SETUP_REGISTRATION ACT ON ACT.SR_ID = AFC.SUB_ACCOUNT_TYPE
+              LEFT JOIN AB_SETUP_REGISTRATION BNK  ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
+            WHERE 
+                   ACT.REG_TYPE = '624'
+               AND ACT.ORG_ID = :GV_ORG_ID
+                AND ACT.REG_STATUS='Y'
+                  GROUP BY  ACT.REG_TYPE,
+                   ACT.SR_ID   ,
+                    ACT.BANK_ID 
         ) AC ON AC.ACCOUNT_ID in (FTD.FROM_ACCOUNT_ID , FTD.TO_ACCOUNT_ID)
         WHERE FT.TR_TYPE = 622 AND FT.ORG_ID = :GV_ORG_ID AND FT.STATUS = 'Y'
           AND FTD.FROM_ACCOUNT_ID = :P510_ID
           AND TRUNC(FT.TR_DATE) BETWEEN NVL(TO_DATE(:P510_FROM_DATE, 'DD-MON-YYYY'), TRUNC(FT.TR_DATE))
                                     AND NVL(TO_DATE(:P510_TO_DATE, 'DD-MON-YYYY'), TRUNC(FT.TR_DATE))
         
-        GROUP BY 
-    AC.ACCOUNT_ID,
-    AC.ACCOUNT_NAME,
-    FT.TR_DATE,
-    NVL(FTD.TRANS_AMOUNT, 0),
-    'Transfer Out'
+    --     GROUP BY 
+    -- AC.ACCOUNT_ID,
+    -- AC.ACCOUNT_NAME,
+    -- FT.TR_DATE,
+    -- NVL(FTD.TRANS_AMOUNT, 0),
+    -- 'Transfer Out'
 
     )
 ) 
-ORDER BY ACCOUNT_ID , RN
+
+where ACCOUNT_ID = NVL(:P510_ID,ACCOUNT_ID)
+ORDER BY  RN, TRANSACTION_DATE ASC
 
 
 
