@@ -1,0 +1,308 @@
+DECLARE
+  v_tax_liability NUMBER := 0;
+  v_inv_net_amount NUMBER := 0;
+  v_inv_bags NUMBER := 0;
+  v_cprn_payments NUMBER := 0;
+BEGIN
+  -- JavaScript for printing and adjusting column widths
+ htp.p('<script>
+        function adjustColumnWidth() {
+          var table = document.querySelector("table");
+          var itemNameColumnIndex = 1; // Index for ITEM NAME column
+          var maxWidth = 0;
+          var rows = table.querySelectorAll("tbody tr");
+          
+          rows.forEach(function(row) {
+            var itemNameCell = row.cells[itemNameColumnIndex];
+            if (itemNameCell) {
+              var cellWidth = itemNameCell.scrollWidth;
+              if (cellWidth > maxWidth) {
+                maxWidth = cellWidth;
+              }
+            }
+          });
+          
+          var header = table.querySelector("thead th.item-name-column");
+          if (header) {
+            header.style.width = maxWidth + "px";
+          }
+          
+          var dataCells = table.querySelectorAll("tbody td.item-name-column");
+          dataCells.forEach(function(cell) {
+            cell.style.width = maxWidth + "px";
+          });
+        }
+       
+        function printDiv(printpage) {
+          adjustColumnWidth();
+          var headstr = "<html><head><title></title><style>";
+          headstr += "@page { size: A4 landscape; margin: 10mm; }";
+          headstr += "body { margin: 0; padding: 0; font-family: Arial, sans-serif; }";
+          headstr += ".button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }";
+          headstr += ".button1 { font-size: 16px; }";
+          headstr += "table { border-collapse: collapse; width: 100%; margin: 0; padding: 0; }";
+          headstr += "th, td { text-align: left; padding: 3px; font-size: 10px; line-height: 1.1; }";
+          headstr += "th { background-color: rgba(146, 208, 80, 0.237); -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += ".separator { border-top: 1px solid black; }";
+          headstr += "h3 { margin: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(146, 208, 80); border: 1px solid black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += "@media print { thead {display: table-header-group;} tfoot {display: table-footer-group;} }";
+          headstr += "h2 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 0; text-align: center; }";
+          headstr += "#div_print1 { margin: 0; padding: 0; }";
+          headstr += "</style></head><body>";
+          var footstr = "</body></html>";
+          var newstr = document.getElementById(printpage).innerHTML;
+          var oldstr = document.body.innerHTML;
+          document.body.innerHTML = headstr + newstr + footstr;
+          window.print();
+          document.body.innerHTML = oldstr;
+          return false;
+        }
+      </script>');
+
+  -- Print buttons for both reports
+ -- htp.p('<button class="button" onclick="printDiv(''amanat_inward_report'')">Print Amanat Inward Report</button>');
+  htp.p('<button class="button" onclick="printDiv(''all_reports'')">Print Reports</button>');
+
+  -- Start merged report container
+  htp.p('<div id="all_reports">');
+
+  -- Daily Stock Report Section`
+  htp.p('<div class="header" style="display: flex; justify-content: space-between; margin-bottom: 20px; ">');
+    htp.p('<h2>AKBAR BROTHERS</h2>');
+    htp.p('<img style="height: 100%" src="#APP_FILES#icons/Akbar Brothers logo.jpg" alt="">');
+    htp.p('</div>');
+
+  htp.p('<h3>Ledger Wise Purchase Invoice</h3>');
+  htp.p('<table>');
+  htp.p('<tr style="padding: 8px; border: 1px solid #ddd;" ><th>INV DATE</th><th>INSTRUMENT INFO</th><th>COMPANY ORDER NO</th><th>Company Invoice No</th>
+  <th>Purchase Oder Date</th><th>Agency Name</th><th>Product</th><th>Invoice Bags</th><th>Per Bag Rate</th><th>Net Amount</th>
+  <th>Debit Amount</th><th>Credit Amount</th>');
+
+  -- Cursor to fetch actual records — you must insert your real query here
+  FOR rec IN (
+          WITH LOOKUP AS(
+                SELECT  DET_ID, LOOKUP_DET_NAME
+                FROM AB_LOOKUP_DETAIL WHERE STATUS='Y'
+
+)
+,REGISTRATION AS(
+                SELECT  SR_ID, REG_NAME, PARTY_NAME,REG_CODE
+                FROM AB_SETUP_REGISTRATION WHERE REG_STATUS='Y'
+)
+,INSTRUEMENT_ID AS (
+    SELECT
+        PO.PO_TYPE,
+        PO.IDS AS PO_ID,
+        POD.IDS AS DET_ID,
+        PO.STATUS,
+        PO.TRANSACTION_TYPE_ID 
+    FROM AB_PO_PURCHASE_ORDER PO 
+    JOIN AB_PO_PURCHASE_ORDER_DET POD 
+        ON POD.PO_ID = PO.PO_ID  
+       AND POD.STATUS = 'Y'
+    WHERE POD.DET_TYPE = 'PO INSTRUMENT'
+      AND POD.STATUS = 'Y'
+      AND POD.ORG_ID = :GV_ORG_ID
+),
+CHK_AMOUNT_DETAILS AS (       
+    SELECT 
+        CHK.CHEQUE_NO, 
+        CHK.CB_ID,
+        INS.DET_ID
+    FROM V_UPDATED_CHECK_BOOK_AMOUNT_VIEW CHK
+    LEFT JOIN INSTRUEMENT_ID INS 
+           ON INS.DET_ID = CHK.CB_ID   
+    WHERE CHK.ORG_ID = :GV_ORG_ID
+)
+  ,INSTURMENT_NO AS (    SELECT
+                   IND.PO_ID,
+                   IND.DET_ID,
+                       CASE 
+                                WHEN S.LIMIT_ID = IND.DET_ID  THEN 'BGNo.# - ' || S.BG_NUMBER || ' - BNK# - ' || S.BANK_NAME
+                                WHEN CHK.CB_ID = IND.DET_ID  THEN 'CHQNo.# - ' || CHK.CHEQUE_NO    ELSE 'N/A'END AS INSTRUMENT_INFO
+                FROM INSTRUEMENT_ID IND
+                LEFT JOIN V_LIMIT_UTILIZATION_STATUS S   ON S.LIMIT_ID = IND.DET_ID
+                LEFT JOIN CHK_AMOUNT_DETAILS CHK  ON CHK.CB_ID = IND.DET_ID                   
+                )
+,TAX_POLICY AS (
+                SELECT
+                          IDS AS PO_DET_ID,
+                          FED,
+                          GST,
+                          AIT,
+                          DISCOUNT,
+                          RATE AS PER_BAGS_RATE,
+                          NET_AMOUNT
+            FROM
+                       AB_SETUP_POLICY_REGISTERED
+            WHERE
+                          POLICY_TYPE = '714'
+               AND ORG_ID = :GV_ORG_ID
+               AND  STATUS='Y'
+)
+,PURCHASE_ORDER AS(
+    SELECT
+                   PO.PO_ID PO_ID,
+                   POD.DET_ID POD_ID,
+                   PO.IDS TPO_ID,
+                   POD.DEMAND_DET_ID TPO_IDD,
+                   ITM.ITEM_ID as PRODUCT_ID,
+                   PO.COMPANY_ID AS COMPANY_ID,
+                ITM.ITEM_NAME||' ('|| ITM.PACKING_SIZE || ' '|| ITM.UNIT || ' '|| ITM.PACKING || ')' AS ITEM_NAME, 
+                   COMPANY_ORDER_NO,
+                   PO.PURCHASING_TYPE,
+                   PO.TRANSACTION_DATE,
+                   CN.REG_NAME COMPANY_NAME,
+                   LT.LOOKUP_DET_NAME ||' - '||LOADING_NAME ||' ('||FT.LOOKUP_DET_NAME||')' LOADING_TYPE,
+                 PM.LOOKUP_DET_NAME|| '('||TT.LOOKUP_DET_NAME||')' PAYMENT_MODE,
+                 TT.LOOKUP_DET_NAME as PAYMENTS_MODES,
+                   NVL(VN.REG_NAME,VN.PARTY_NAME) VENDOR_NAME,
+                   AG.REG_NAME||'-'|| AG.REG_CODE AGENCY_NAME,
+                   PO.REMARKS,
+                   CASE WHEN PO.IDS IS NOT NULL THEN 'CONVERT PO' ELSE 'ACTUAL PO' END PO_STATUS,
+                   PO.CREATED_BY||' ('||TO_CHAR(PO.CREATED_ON,'DD-MON-YYYY')CREATED_BY,
+                   POD.CHANGE_BAGS,
+                   POD.CHANGE_TONS,
+                   NVL(TP.PER_BAGS_RATE,POD.RATE)PER_BAGS_RATE,
+                   NVL(TP.NET_AMOUNT,POD.NET_AMOUNT) NET_AMOUNT,PO.AGENCY_ID,
+                   INS.INSTRUMENT_INFO
+    FROM
+                           AB_PO_PURCHASE_ORDER PO
+             JOIN  AB_PO_PURCHASE_ORDER_DET POD ON POD.PO_ID=PO.PO_ID AND PO.STATUS='Y'
+        LEFT JOIN AB_ITEMS_MASTER ITM ON ITM.ITEM_ID = POD.ITEM_ID 
+        LEFT JOIN  LOOKUP LT ON LT.DET_ID = PO.LOADING_TYPE_ID
+        LEFT JOIN  LOOKUP FT ON FT.DET_ID = PO.FREIGHT_TYPE_ID
+        LEFT JOIN  LOOKUP PM ON PM.DET_ID = PO.PAYMENT_MODE_ID
+        LEFT JOIN  LOOKUP TT ON TT.DET_ID = PO.TRANSACTION_TYPE_ID
+        LEFT JOIN  REGISTRATION CN ON CN.SR_ID=PO.COMPANY_ID
+        LEFT JOIN  REGISTRATION VN ON VN.SR_ID=PO.VENDOR_ID
+        LEFT JOIN  REGISTRATION AG ON AG.SR_ID=PO.AGENCY_ID
+        LEFT JOIN  TAX_POLICY TP ON  TP.PO_DET_ID=POD.DET_ID 
+         LEFT JOIN INSTURMENT_NO INS ON INS.PO_ID = PO.PO_ID
+    WHERE
+                     PO.PO_TYPE='PURCHASE ORDER'
+            AND PO.STATUS='Y'
+            AND PO.ORG_ID=:GV_ORG_ID
+    UNION ALL
+    SELECT
+                   PO.PO_ID PO_ID,
+                   POD.DET_ID POD_ID,
+                   PO.IDS TPO_ID,
+                   POD.DEMAND_DET_ID TPO_IDD,
+                   ITM.ITEM_ID as PRODUCT_ID,
+                   PO.COMPANY_ID AS COMPANY_ID,
+                   ITM.ITEM_NAME||' ('|| ITM.PACKING_SIZE || ' '|| ITM.UNIT || ' '|| ITM.PACKING || ')' AS ITEM_NAME, 
+                   COMPANY_ORDER_NO,
+                   PO.PURCHASING_TYPE,
+                   PO.TRANSACTION_DATE,
+                   CN.REG_NAME COMPANY_NAME,
+                   LT.LOOKUP_DET_NAME ||' - '||LOADING_NAME ||' ('||FT.LOOKUP_DET_NAME||')' LOADING_TYPE,
+                   PM.LOOKUP_DET_NAME||'('||TT.LOOKUP_DET_NAME||')' PAYMENT_MODE,
+                      TT.LOOKUP_DET_NAME as PAYMENTS_MODES,
+                   NVL(VN.REG_NAME,VN.PARTY_NAME) VENDOR_NAME,
+                   AG.REG_NAME||'-'|| AG.REG_CODE AGENCY_NAME,
+                   PO.REMARKS,
+                   CASE WHEN PO.IDS IS NOT NULL THEN 'CONVERT PO' ELSE 'ACTUAL PO' END PO_STATUS,
+                   PO.CREATED_BY||' ('||TO_CHAR(PO.CREATED_ON,'DD-MON-YYYY')CREATED_BY,
+                   POD.CHANGE_BAGS,
+                   POD.CHANGE_TONS,
+                   NVL(TP.PER_BAGS_RATE,POD.RATE)PER_BAGS_RATE,
+                   NVL(TP.NET_AMOUNT,POD.NET_AMOUNT) NET_AMOUNT,PO.AGENCY_ID,
+                   INS.INSTRUMENT_INFO
+    FROM
+                           AB_PO_PURCHASE_ORDER PO
+                 JOIN  AB_PO_PURCHASE_ORDER_DET POD ON POD.PO_ID=PO.PO_ID AND PO.STATUS='Y'
+        LEFT JOIN  AB_ITEMS_MASTER ITM ON ITM.ITEM_ID = POD.ITEM_ID 
+        LEFT JOIN  LOOKUP LT ON LT.DET_ID = PO.LOADING_TYPE_ID
+        LEFT JOIN  LOOKUP FT ON FT.DET_ID = PO.FREIGHT_TYPE_ID
+        LEFT JOIN  LOOKUP PM ON PM.DET_ID = PO.PAYMENT_MODE_ID
+        LEFT JOIN  LOOKUP TT ON TT.DET_ID = PO.TRANSACTION_TYPE_ID
+        LEFT JOIN  REGISTRATION CN ON CN.SR_ID=PO.COMPANY_ID
+        LEFT JOIN  REGISTRATION VN ON VN.SR_ID=PO.VENDOR_ID
+        LEFT JOIN  REGISTRATION AG ON AG.SR_ID=PO.AGENCY_ID
+        LEFT JOIN  TAX_POLICY TP ON  TP.PO_DET_ID=POD.DET_ID
+        LEFT JOIN INSTURMENT_NO INS ON INS.PO_ID = PO.PO_ID
+    WHERE
+                     PO.PO_TYPE='717'
+            AND PO.STATUS='Y'
+            AND PO.ORG_ID=:GV_ORG_ID        
+)
+        SELECT
+                INV.PO_ID INV_ID,
+                TO_CHAR(INV.TRANSACTION_DATE,'DD-MON-YYYY')  INV_DATE,
+                COMPANY_INVOICE_NUMBER,
+                PO.PO_ID,
+                PO.COMPANY_ORDER_NO,
+                INV.CO_INVOICE_NO,
+                PO.ITEM_NAME,
+                PO.PURCHASING_TYPE,
+                TO_CHAR(PO.TRANSACTION_DATE,'DD-MON-YYYY') PURCHASE_ORDER_DATE,
+                PO.COMPANY_NAME ,
+                PO.LOADING_TYPE ,
+                PO.PAYMENT_MODE ,
+                PO.VENDOR_NAME  ,
+                PO.AGENCY_NAME,
+                INVD.CHANGE_BAGS INVOICE_BAGS,
+                ROUND(PO.PER_BAGS_RATE,3) PER_BAGS_RATE,
+                ROUND(INVD.CHANGE_BAGS * NVL(PER_BAGS_RATE,0),3)  NET_AMOUNT,
+                PO.REMARKS,
+                PO. PO_STATUS,
+                INITCAP(INV.CREATED_BY)||' ('||TO_CHAR(INV.CREATED_ON,'DD-MON-YYYY') CREATED_BY,
+                 PO.AGENCY_ID,
+                 PO.INSTRUMENT_INFO,
+                  CASE 
+                   WHEN UPPER(PO.PAYMENTS_MODES) IN ('CASH','DCF','BANK GUARANTEE')  --AND PO.INSTRUMENT_INFO IS NOT NULL
+                        THEN ROUND(INVD.CHANGE_BAGS * NVL(PER_BAGS_RATE,0),3)
+                   ELSE NULL
+                END AS DEBIT,
+                
+                CASE 
+                   WHEN UPPER(PO.PAYMENTS_MODES) = 'CHEQUE'   --AND PO.INSTRUMENT_INFO IS NOT NULL
+                        THEN ROUND(INVD.CHANGE_BAGS * NVL(PER_BAGS_RATE,0),3)
+                   ELSE NULL
+                END AS CREDIT,
+                PO.PAYMENTS_MODES
+                
+        FROM
+                     AB_PO_PURCHASE_ORDER INV
+                JOIN AB_PO_PURCHASE_ORDER_DET INVD ON INVD.PO_ID=INV.PO_ID AND INVD.STATUS = 'Y'
+                JOIN PURCHASE_ORDER PO ON PO.POD_ID=INVD.IDS OR PO.TPO_IDD=INVD.IDS
+               
+ 
+        WHERE
+                     INV.PO_TYPE='PURCHASE INVOICE'
+            AND INV.STATUS = 'Y'
+            AND INV.ORG_ID=:GV_ORG_ID
+            AND TRUNC(INV.TRANSACTION_DATE) BETWEEN NVL(TO_DATE(:P742_FROM_DATE, 'DD-MON-YYYY'), TRUNC(INV.TRANSACTION_DATE))
+            AND NVL(TO_DATE(:P742_TO_DATE, 'DD-MON-YYYY'),TRUNC(INV.TRANSACTION_DATE))
+            AND PO.AGENCY_ID = NVL(:P742_AGENCY_NAME,PO.AGENCY_ID)
+           AND (PO.PRODUCT_ID IN ( SELECT REGEXP_SUBSTR(:P742_PRODUCT_NAME, '[^:]+', 1, LEVEL) FROM dual
+            CONNECT BY REGEXP_SUBSTR(:P742_PRODUCT_NAME, '[^:]+', 1, LEVEL) IS NOT NULL ) OR :P742_PRODUCT_NAME IS NULL)  
+        ORDER BY 
+                    INV.PO_ID DESC
+    
+  ) LOOP
+    htp.p('<tr>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.INV_DATE || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.INSTRUMENT_INFO || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.COMPANY_ORDER_NO || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.CO_INVOICE_NO || '</td>' ||
+            '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.PURCHASE_ORDER_DATE || '</td>' ||
+            '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.AGENCY_NAME || '</td>' ||
+            '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.ITEM_NAME || '</td>' ||
+            '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.INVOICE_BAGS || '</td>' ||
+           '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.PER_BAGS_RATE || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.NET_AMOUNT || '</td>' ||
+            '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.DEBIT || '</td>' ||
+           '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.CREDIT || '</td>' ||
+         
+          '</tr>');
+
+  
+  END LOOP;
+
+  
+
+  htp.p('</table>');
+  htp.p('</div>'); -- close all_reports
+END;
