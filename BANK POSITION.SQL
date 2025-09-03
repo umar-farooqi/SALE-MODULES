@@ -600,84 +600,128 @@ SELECT
    
                                  UNION ALL
 
+
+                  SELECT
+     COA.SUB_ACCOUNT_TYPE AS ACCOUNT_ID,
+     NULL AS ACCOUNT_NAME,
+     NULL AS TRANSACTION_DATE,
+     NULL AS TR_DESCRIPTION,
+      NULL AS OPENING_AMOUNT,
+     NULL AS RECEIVING_AMOUNT,
+     NULL AS TRANSFER_IN_AMOUNT,
+     NULL AS APPROVED_AMOUNT,
+     NULL AS TRANSFER_OUT_AMOUNT,
+    
+    SUM(NVL(TRD.CR_AMOUNT, 0)) AS MANUAL_VOUCHER_AMOUNT,
+     'Manual' AS SOURCE
+FROM
+         AB_FIN_TRANSACTION TR
+    JOIN AB_FIN_TRANSACTION_DET TRD 
+        ON TR.TR_ID = TRD.TR_ID
+    LEFT JOIN AB_FIN_COA COA 
+        ON COA.COA_ID = TRD.COA_IDD 
+       AND COA.STATUS = 'Y'
+    LEFT JOIN AB_SETUP_REGISTRATION SR 
+        ON SR.SR_ID = TRD.COA_IDD
+    JOIN (
+        SELECT
+            APP_IDS AS APP_ID
+        FROM 
+            AB_USER_ACTION_APPROVAL
+        WHERE 
+            APP_TYPE = '780'
+            AND STATUS = 'Y'
+            AND APPROVAL_STATUS = 'APPROVED'
+            AND ORG_ID = :GV_ORG_ID
+    ) UA 
+        ON UA.APP_ID = TR.TR_ID
+WHERE
+    TR.TR_TYPE IN (635)   
+    AND TR.VOUCHER_TYPE_ID = 611
+    AND TR.ORG_ID = :GV_ORG_ID
+    AND TR.STATUS = 'Y'
+    AND TRUNC(TR.TR_DATE) BETWEEN NVL(TO_DATE(:P510_FROM_DATE, 'DD-MON-YYYY'), TRUNC(TR.TR_DATE))
+                              AND NVL(TO_DATE(:P510_TO_DATE, 'DD-MON-YYYY'), TRUNC(TR.TR_DATE))
+GROUP BY
+    COA.SUB_ACCOUNT_TYPE
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
           
 
-    SELECT 
-            AC.ACCOUNT_ID,
-            AC.ACCOUNT_NAME,
-            TR.TR_DATE AS TRANSACTION_DATE,
-            TRD.TR_DESCRIPTION || ' Transcation Amount ('||NVL(TO_NUMBER(REGEXP_REPLACE(TRD.RECEIVING_AMOUNT, '[^0-9.]', '')),TRD.TRD_AMOUNT)||')' TR_DESCRIPTION,
-              NULL AS OPENING_AMOUNT,
-            NULL AS RECEIVING_AMOUNT,
-            NULL AS TRANSFER_IN_AMOUNT,
-            NULL AS APPROVED_AMOUNT,
-            NULL AS TRANSFER_OUT_AMOUNT,
-            NVL(TRD.CR_AMOUNT, 0) MANUAL_VOUCHER_AMOUNT,
-            'Manual' AS SOURCE
-    FROM
-                  AB_FIN_TRANSACTION TR
-             JOIN AB_FIN_TRANSACTION_DET TRD ON TR.TR_ID = TRD.TR_ID
-        LEFT JOIN AB_FIN_COA COA ON COA.COA_ID = TRD.COA_IDD AND COA.STATUS = 'Y'
-        LEFT JOIN AB_SETUP_REGISTRATION SR ON SR.SR_ID = TRD.COA_IDD
-             JOIN  (     SELECT
-                  APP_IDS INOVICE_ID
-            FROM
-                  AB_USER_ACTION_APPROVAL
-            WHERE
-                     APPROVAL_STATUS='AUDIT APPROVED'
-                AND  STATUS='Y'
-            GROUP BY
-                           APP_IDS  )  UA ON UA.INOVICE_ID=TR.TR_ID
-          JOIN (
-             SELECT   
-                  MAX(AFC.ACCOUNT_TITLE) AS ACCOUNT_NAME,
-                   ACT.REG_TYPE,
-                    ACT.SR_ID ACCOUNT_ID   ,
-                    ACT.BANK_ID                  
-               FROM   AB_FIN_COA AFC
-              LEFT  JOIN  AB_SETUP_REGISTRATION ACT ON ACT.SR_ID = AFC.SUB_ACCOUNT_TYPE
-              LEFT JOIN AB_SETUP_REGISTRATION BNK  ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
-            WHERE 
-                   ACT.REG_TYPE = '624'
-               AND ACT.ORG_ID = :GV_ORG_ID
-                AND ACT.REG_STATUS='Y'
-                  GROUP BY  ACT.REG_TYPE,
-                   ACT.SR_ID   ,
-                    ACT.BANK_ID 
-        )  AC ON AC.ACCOUNT_ID = COA.SUB_ACCOUNT_TYPE
-    WHERE
-            -- TR.TR_TYPE IN (653,662,635)
-            TR.TR_TYPE IN (635)
-        AND TR.ORG_ID = :GV_ORG_ID
-        AND TR.STATUS = 'Y'
-        AND INOVICE_ID IS NOT NULL
-         AND COA.SUB_ACCOUNT_TYPE = :P510_ID
-        AND TRUNC(TR.TR_DATE) BETWEEN NVL(TO_DATE(:P510_FROM_DATE, 'DD-MON-YYYY'), TRUNC(TR.TR_DATE))
-                                     AND NVL(TO_DATE(:P510_TO_DATE, 'DD-MON-YYYY'), TRUNC(TR.TR_DATE))
+    -- SELECT 
+    --         AC.ACCOUNT_ID,
+    --         AC.ACCOUNT_NAME,
+    --         TR.TR_DATE AS TRANSACTION_DATE,
+    --         TRD.TR_DESCRIPTION || ' Transcation Amount ('||NVL(TO_NUMBER(REGEXP_REPLACE(TRD.RECEIVING_AMOUNT, '[^0-9.]', '')),TRD.TRD_AMOUNT)||')' TR_DESCRIPTION,
+    --           NULL AS OPENING_AMOUNT,
+    --         NULL AS RECEIVING_AMOUNT,
+    --         NULL AS TRANSFER_IN_AMOUNT,
+    --         NULL AS APPROVED_AMOUNT,
+    --         NULL AS TRANSFER_OUT_AMOUNT,
+    --         NVL(TRD.CR_AMOUNT, 0) MANUAL_VOUCHER_AMOUNT,
+    --         'Manual' AS SOURCE
+    -- FROM
+    --               AB_FIN_TRANSACTION TR
+    --          JOIN AB_FIN_TRANSACTION_DET TRD ON TR.TR_ID = TRD.TR_ID
+    --     LEFT JOIN AB_FIN_COA COA ON COA.COA_ID = TRD.COA_IDD AND COA.STATUS = 'Y'
+    --     LEFT JOIN AB_SETUP_REGISTRATION SR ON SR.SR_ID = TRD.COA_IDD
+    --          JOIN  (     SELECT
+    --               APP_IDS INOVICE_ID
+    --         FROM
+    --               AB_USER_ACTION_APPROVAL
+    --         WHERE
+    --                  APPROVAL_STATUS='AUDIT APPROVED'
+    --             AND  STATUS='Y'
+    --         GROUP BY
+    --                        APP_IDS  )  UA ON UA.INOVICE_ID=TR.TR_ID
+    --       JOIN (
+    --          SELECT   
+    --               AFC.ACCOUNT_TITLE AS ACCOUNT_NAME,
+    --                ACT.REG_TYPE,
+    --                 ACT.SR_ID ACCOUNT_ID   ,
+    --                 ACT.BANK_ID                  
+    --            FROM   AB_FIN_COA AFC
+    --           LEFT  JOIN  AB_SETUP_REGISTRATION ACT ON ACT.SR_ID = AFC.SUB_ACCOUNT_TYPE
+    --           LEFT JOIN AB_SETUP_REGISTRATION BNK  ON BNK.SR_ID = ACT.BANK_ID AND BNK.REG_TYPE = 'BANK'
+    --         WHERE 
+    --                ACT.REG_TYPE = '624'
+    --            AND ACT.ORG_ID = :GV_ORG_ID
+    --             AND ACT.REG_STATUS='Y'
+    --              -- GROUP BY  ACT.REG_TYPE,
+    --              --  ACT.SR_ID   ,
+    --               --  ACT.BANK_ID 
+    --     )  AC ON AC.ACCOUNT_ID = COA.SUB_ACCOUNT_TYPE
+    -- WHERE
+    --         -- TR.TR_TYPE IN (653,662,635)
+    --         TR.TR_TYPE IN (635)
+    --     AND TR.ORG_ID = :GV_ORG_ID
+    --     AND TR.STATUS = 'Y'
+    --     AND INOVICE_ID IS NOT NULL
+    --      AND COA.SUB_ACCOUNT_TYPE = :P510_ID
+    --     AND TRUNC(TR.TR_DATE) BETWEEN NVL(TO_DATE(:P510_FROM_DATE, 'DD-MON-YYYY'), TRUNC(TR.TR_DATE))
+    --                                  AND NVL(TO_DATE(:P510_TO_DATE, 'DD-MON-YYYY'), TRUNC(TR.TR_DATE))
 
     )
 ) 
 
 where ACCOUNT_ID = NVL(:P510_ID,ACCOUNT_ID)
 ORDER BY  RN, TRANSACTION_DATE ASC
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
