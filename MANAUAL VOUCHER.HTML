@@ -1,0 +1,205 @@
+DECLARE
+  v_total_dr_amount NUMBER := 0;
+  v_total_cr_amount NUMBER := 0;
+  v_created_by      VARCHAR2(100);
+  v_approved_by     VARCHAR2(100);
+  v_tr_id           NUMBER; -- Variable to store the current transaction ID
+BEGIN
+  -- HTML header
+  htp.p('<html>');
+  htp.p('<head>');
+  htp.p('<title>Voucher Report</title>');
+  htp.p('<style>');
+  htp.p('body { font-family: Arial; font-size: 12px; }');
+  htp.p('table { border-collapse: collapse; width: 100%; }');
+  htp.p('th, td { border: 1px solid black; padding: 5px; text-align: left; }');
+  htp.p('.info-table { width: 40%; float: right; margin-left: 20px; margin-bottom: 20px;border:none; }');
+  htp.p('.info-table1 { width: 100%; float: left; margin-right: 2px;  margin-bottom: 10px;border:none; }');
+  htp.p('</style>');
+
+  htp.p(q'[
+<script>
+  function printDiv(divId) {
+    var printContents = document.getElementById(divId).innerHTML;
+    var originalContents = document.body.innerHTML;
+
+    var printStyles = `
+      <style>
+        body { font-family: Arial; font-size: 12px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid black; padding: 5px; text-align: left; }
+        .info-table { width: 40%; float: right; margin-left: 20px; margin-bottom: 20px; }
+      </style>
+    `;
+
+    document.body.innerHTML = printStyles + printContents;
+    window.print();
+    document.body.innerHTML = originalContents;
+  }
+</script>
+  ]');
+
+  htp.p('</head>');
+  htp.p('<body>');
+
+  htp.p('<button class="no-print" onclick="printDiv(''print-page'');">Print Voucher</button>');
+  htp.p('<div style="size: 72mm auto;" id="print-page">');
+  htp.p('<div class="report-content">');
+
+FOR I IN (
+WITH USER_APPROVAL AS (
+         SELECT
+            APP_IDS AS APP_ID,
+            INITCAP(CREATED_BY) AS APPROVED_BY,
+            APPROVAL_STATUS,
+            CREATED_ON
+         FROM 
+            AB_USER_ACTION_APPROVAL
+         WHERE 
+            APP_TYPE = '780'
+            AND STATUS = 'Y'
+            AND ORG_ID = :GV_ORG_ID)
+   SELECT
+          TRD_IDS TRD_ID,
+          TR.TR_ID,
+          VOUCHER_NAME,
+          INITCAP(TR.CREATED_BY) CREATED_BY,
+          UA.APPROVED_BY
+       
+      FROM
+          AB_FIN_TRANSACTION_DET TRD
+      JOIN AB_FIN_TRANSACTION TR ON TR.TR_ID = TRD.TR_ID 
+      LEFT JOIN USER_APPROVAL UA ON UA.APP_ID = TR.TR_ID
+      WHERE
+         TRD.ORG_ID = :GV_ORG_ID
+          AND TRD.STATUS = 'Y'
+            AND TR.STATUS = 'Y' 
+            AND TR.TR_ID = :P514_TR_ID
+      GROUP BY
+          TRD.TRD_IDS,
+          VOUCHER_NAME,
+          TR.TR_ID,TR.CREATED_BY, UA.APPROVED_BY
+)LOOP
+  -- Store the current transaction ID in a variable
+  v_tr_id := I.TR_ID;
+  
+  -- Reset totals for each voucher
+  v_total_dr_amount := 0;
+  v_total_cr_amount := 0;
+
+  -- Voucher Report Header
+  htp.p('<table>');
+  htp.p('<tr><td style="text-align: center;border:none;"><b>Akbar Brothers</b></td>');
+  htp.p('<tr><td style="text-align: center;border:none;">' || I.VOUCHER_NAME || '</td></tr>');
+  htp.p('</table>');
+
+  FOR x IN (
+    SELECT
+      CASE 
+        WHEN APPROVAL_STATUS = 'APPROVED' THEN 
+          '<span style="background-color: #D4EDDA; color: #155724; padding: 5px 15px; border-radius: 5px; border: 1px solid #C3E6CB; margin: 5px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1); display: inline-block;">Posted<span class="static-icon">✅</span></span>'  
+        WHEN APPROVAL_STATUS = 'REJECTED' THEN 
+          '<span style="background-color: #D1ECF1; color: #0C5460; padding: 5px 15px; border-radius: 5px; border: 1px solid #BEE5EB; margin: 5px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1); display: inline-block;">Rejected<span class="spin-icon">❌</span></span>'  
+        ELSE
+          '<span style="background-color: #f0acb2; color: #721C24; padding: 5px 15px; border-radius: 5px; border: 1px solid #C3E6CB; margin: 5px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1); display: inline-block;">Requested For Posting <span class="blinking-icon">🚨</span></span>'
+      END AS VOUCHER_STATUS
+    FROM
+      AB_USER_ACTION_APPROVAL UA
+    WHERE
+      UA.APP_TYPE = '780'
+      AND UA.STATUS = 'Y'
+      AND UA.ORG_ID = :GV_ORG_ID
+      AND UA.APP_IDS = v_tr_id  -- Use the variable instead of parameter
+  ) LOOP
+    -- Right-side Info Table
+    htp.p('<table class="info-table">');
+    htp.p('<tr><td style="border:none;"><b>Status</b></td><td style="border:none;">' || x.VOUCHER_STATUS || '</td></tr>');
+    htp.p('<tr><td style="border:none;"><b>Date</b></td><td style="border:none;">' || TO_CHAR(SYSDATE, 'DD-MON-YYYY') || '</td></tr>');
+    htp.p('<tr><td style="border:none;"><b>Print By</b></td><td style="border:none;">' || :app_user || '</td></tr>');
+    htp.p('</table>');
+  END LOOP;
+
+  -- Main transaction table
+  htp.p('<table style="width: 100%;border:none; margin-top: 20px; font-family: Arial, sans-serif;">');
+  htp.p('<tr style="background-color: #f2f2f2; font-weight: bold; text-align: left;">');
+  htp.p('<th style="border:none; padding: 6px; width: 12%;">Code #</th>');
+  htp.p('<th style="border: none; padding: 6px; width: 10%;">Date</th>');
+  htp.p('<th style="border: none; padding: 6px; width: 38%;">Account Title & Narration</th>');
+  htp.p('<th style="border: none; padding: 6px; width: 12%; text-align: right;">DR Amount</th>');
+  htp.p('<th style="border: none; padding: 6px; width: 13%; text-align: right;">CR Amount</th>');
+  htp.p('</tr>');
+
+  -- Simplified query to get both debit and credit transactions
+  FOR rec IN (
+    SELECT 
+      COA.GL_CODE,
+      TO_CHAR(TRD.TRD_DATE, 'DD-MON-YYYY') AS TRANSCATION_DATE,
+      CASE 
+        WHEN TRD.DR_AMOUNT IS NOT NULL THEN COA.ACCOUNT_TITLE-- || ' - ' || TR.TR_DESCRIPTION
+        ELSE COA.ACCOUNT_TITLE --|| ' - ' || TR.TR_DESCRIPTION
+      END AS ACCOUNT_AND_NARRATION,
+      TRD.DR_AMOUNT,
+      TRD.CR_AMOUNT
+    FROM 
+      AB_FIN_TRANSACTION_DET TRD
+      JOIN AB_FIN_TRANSACTION TR ON TR.TR_ID = TRD.TR_ID
+      JOIN AB_FIN_COA COA ON COA.COA_ID = TRD.COA_IDD
+    WHERE
+      TR.ORG_ID = :GV_ORG_ID
+      AND TR.STATUS = 'Y' 
+      AND TRD.STATUS = 'Y'
+      AND TR.TR_ID = v_tr_id  -- Use the variable instead of parameter
+    ORDER BY
+      TRD.TRD_DATE
+  ) LOOP
+    v_total_dr_amount := v_total_dr_amount + NVL(rec.DR_AMOUNT, 0);
+    v_total_cr_amount := v_total_cr_amount + NVL(rec.CR_AMOUNT, 0);
+    v_created_by := I.CREATED_BY;
+    v_approved_by := I.APPROVED_BY;
+    
+    htp.p('<tr>');
+    htp.p('<td style="border:none; border-bottom: 1px solid black;">' || rec.GL_CODE || '</td>');
+    htp.p('<td style="border:none; border-bottom: 1px solid black;">' || rec.TRANSCATION_DATE || '</td>');
+    htp.p('<td style="border:none; border-bottom: 1px solid black;">' || rec.ACCOUNT_AND_NARRATION || '</td>');
+    htp.p('<td style="border:none; border-bottom: 1px solid black; text-align: right;">' || TO_CHAR(rec.DR_AMOUNT, '999G999G999D00') || '</td>');
+    htp.p('<td style="border:none; border-bottom: 1px solid black; text-align: right;">' || TO_CHAR(rec.CR_AMOUNT, '999G999G999D00') || '</td>');
+    htp.p('</tr>');
+  END LOOP;
+
+  htp.p('<tr style="font-weight:bold;">');
+  htp.p('<td colspan="3" style="border:none; border-bottom: 1px solid black;border-top: 1px solid black;padding: 6px; text-align: right;">Total</td>');
+  htp.p('<td style="border:none;border-bottom: 1px solid black;border-top: 1px solid black; padding: 6px; text-align: right;">' || TO_CHAR(v_total_dr_amount, '999G999G999D00') || '</td>');
+  htp.p('<td style="border:none;border-bottom: 1px solid black;border-top: 1px solid black; padding: 6px; text-align: right;">' || TO_CHAR(v_total_cr_amount, '999G999G999D00') || '</td>');
+  htp.p('</tr>');
+  
+  -- Row showing numeric amount total
+  htp.p('<tr>');
+  htp.p('<td colspan="3" style="text-align: right; border:none; border-bottom: 1px solid black;background-color: #f2f2f2;"><b>The Sum of Amount: </b></td>');
+  htp.p('<td style="border:none; border-bottom: 1px solid black; padding: 1px; text-align: left;background-color: #f2f2f2;">' || TO_CHAR(v_total_dr_amount, '999G999G999D00') || '</td>');
+  htp.p('<td style="border:none; border-bottom: 1px solid black;background-color: #f2f2f2;"></td>');
+  htp.p('</tr>');
+  
+  htp.p('<table class="info-table1">');
+  -- Row showing amount in words
+  htp.p('<tr>');
+  htp.p('<td colspan="5" style="border:none;border-bottom: 1px solid black;text-align: left; font-size: 14px;"><b>Amount in Words: ' || NUMBER_TO_WORDS(v_total_dr_amount) || '</b></td>');
+  htp.p('</tr>');
+  htp.p('</table>');
+END LOOP;
+
+htp.p('<br><br>');
+htp.p('<table style="width: 100%; margin-top: 30px;border:none;">');
+htp.p('<tr>');
+htp.p('<td style="height: 50px;border:none; text-align:center;">' || NVL(v_created_by, '-') || '</td>');
+htp.p('<td style="height: 50px;border:none;"></td>');
+htp.p('<td style="height: 50px;border:none; text-align:center;">' || NVL(v_approved_by, '-') || '</td>');
+htp.p('<td style="height: 50px;border:none;"></td>');
+htp.p('</tr>');
+htp.p('<tr>');
+htp.p('<td style="text-align: center;border:none;"><b>Post By</b></td>');
+htp.p('<td style="text-align: center;border:none;"><b>Checked By</b></td>');
+htp.p('<td style="text-align: center;border:none;"><b>Audit By</b></td>');
+htp.p('<td style="text-align: center;border:none;"><b>Received By</b></td>');
+htp.p('</tr>');
+htp.p('</table>');
+END LOOP;
