@@ -1,0 +1,246 @@
+DECLARE
+  pur_qty NUMBER := 0;
+  pur_amount NUMBER := 0;
+  pur_val NUMBER := 0;
+  sale_amount NUMBER := 0;
+  sale_val NUMBER := 0;
+  bal NUMBER := 0;
+  sum_bal NUMBER := 0;
+  sum_qty NUMBER := 0;
+  v_last_payment_mode VARCHAR2(200) := NULL;
+  rec_PAYMENT_MODE  VARCHAR2(200) ;
+BEGIN
+    
+  -- JavaScript for printing and adjusting column widths
+ htp.p('<script>
+        function adjustColumnWidth() {
+          var table = document.querySelector("table");
+          var itemNameColumnIndex = 1; // Index for ITEM NAME column
+          var maxWidth = 0;
+          var rows = table.querySelectorAll("tbody tr");
+          
+          rows.forEach(function(row) {
+            var itemNameCell = row.cells[itemNameColumnIndex];
+            if (itemNameCell) {
+              var cellWidth = itemNameCell.scrollWidth;
+              if (cellWidth > maxWidth) {
+                maxWidth = cellWidth;
+              }
+            }
+          });
+          
+          var header = table.querySelector("thead th.item-name-column");
+          if (header) {
+            header.style.width = maxWidth + "px";
+          }
+          
+          var dataCells = table.querySelectorAll("tbody td.item-name-column");
+          dataCells.forEach(function(cell) {
+            cell.style.width = maxWidth + "px";
+          });
+        }
+       
+        function printDiv(printpage) {
+          adjustColumnWidth();
+          var headstr = "<html><head><title></title><style>";
+          headstr += "@page { size: A4 landscape; margin: 10mm; }";
+          headstr += "body { margin: 0; padding: 0; font-family: Arial, sans-serif; }";
+          headstr += ".button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }";
+          headstr += ".button1 { font-size: 16px; }";
+          headstr += ".summary { colspan: 4; }";
+          headstr += "table { border-collapse: collapse; width: 100%; margin: 0; padding: 0; }";
+          headstr += "th, td { text-align: left; padding: 3px; font-size: 10px; line-height: 1.1; }";
+          headstr += "th { background-color: rgba(146, 208, 80, 0.237); -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += ".separator { border-top: 1px solid black; }";
+          headstr += "h3 { margin: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(146, 208, 80); border: 1px solid black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += "@media print { thead {display: table-header-group;} tfoot {display: table-footer-group;} }";
+          headstr += "h2 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 0; text-align: center; }";
+          headstr += "#div_print1 { margin: 0; padding: 0; }";
+          headstr += "</style></head><body>";
+          var footstr = "</body></html>";
+          var newstr = document.getElementById(printpage).innerHTML;
+          var oldstr = document.body.innerHTML;
+          document.body.innerHTML = headstr + newstr + footstr;
+          window.print();
+          document.body.innerHTML = oldstr;
+          return false;
+        }
+      </script>');
+
+  -- Print buttons for both reports
+ -- htp.p('<button class="button" onclick="printDiv(''amanat_inward_report'')">Print Amanat Inward Report</button>');
+  htp.p('<button class="button" onclick="printDiv(''all_reports'')">Print Sheet</button>');
+
+  -- Start merged report container
+  htp.p('<div id="all_reports">');
+
+  -- Daily Stock Report Section`
+  htp.p('<div class="header" style="display: flex; justify-content: space-between; margin-bottom: 20px; ">');
+  
+    htp.p('<h2 style="taxt-align: center; margin-top: 20px; ">IBRAHIM TRADERS</h2>');
+    htp.p('<img src="#APP_FILES#WhatsApp Image 2025-08-21 at 11.35.38 AM.jpeg" alt=""
+     style="max-width:100%; width:200px; height:auto;">');
+    htp.p('</div>');
+htp.p('
+<div style="font-family: Arial, sans-serif; font-size: 13px; padding: 6px; ">
+   <span style="margin-right: 30px;"><b>From Date:</b> '|| :P36_FROM_DATE ||'</span>
+   <span style="margin-right: 30px;"><b>To Date:</b> '|| :P36_TO_DATE ||'</span>
+   <span><b>Print Date:</b> '|| TO_CHAR(SYSDATE, 'DD-MON-YYYY') ||'</span>
+   <span style="margin-left: 360px;"><b>Printed By:</b> '|| :APP_USER  ||'</span>
+</div>');
+
+
+
+
+       htp.p('<h3 style="text-align:center;">Recovery Sheet</h3>');
+  
+  htp.p('<table>');
+  
+  
+htp.p('
+<tr style="padding: 8px; border: 1px solid #ddd;">
+    <th>Sr</th>
+   
+    <th>PARTY NAME</th>
+    <th>CITY</th>
+    <th>RECOVERY AMOUNT</th>
+   
+</tr>');
+
+ 
+
+  -- Cursor to fetch actual records — you must insert your real query here
+  FOR rec IN (
+         
+              
+   WITH PARTY_NAME AS (
+        SELECT
+                ACCOUNT_ID   PARTY_ID ,
+                ACCOUNT_TITLE    PARTY_NAME
+        FROM 
+                TABLE(AB_FINANCE_DETAIL_PKG.PARTY_WISE_LEDGER(:GV_ORG_ID)) C
+        GROUP BY
+                    ACCOUNT_ID,
+                    ACCOUNT_TITLE
+)
+,RECEVING_BEFORE AS(
+            SELECT
+                 	ACCOUNT_ID PARTY_ID,
+                    ACCOUNT_TITLE PARTY_NAME,-- TRANSCATION_DATE,
+                    NVL(SUM(DR_AMOUNT),0) - NVL(SUM(CR_AMOUNT),0)   RECEVIED_BEFORE_AMOUNT
+            FROM 
+                TABLE(AB_FINANCE_DETAIL_PKG.PARTY_WISE_LEDGER(:GV_ORG_ID)) C   
+        WHERE
+                 TRUNC(TRANSCATION_DATE) < NVL(TO_DATE(:P826_FROM_DATE, 'DD-MON-YYYY'),TRUNC(TRANSCATION_DATE))      
+            GROUP BY
+                    ACCOUNT_ID,
+                    ACCOUNT_TITLE--,TRANSCATION_DATE
+)
+,RECEVING_BETWEEN AS(
+         SELECT
+                 	ACCOUNT_ID PARTY_ID,
+                    ACCOUNT_TITLE PARTY_NAME,	max(TRANSCATION_DATE) as TRANSCATION_DATE ,
+                    NVL(SUM(DR_AMOUNT),0) -  NVL(SUM(CR_AMOUNT),0)   RECEVIED_BETWEEN_AMOUNT
+            FROM 
+                TABLE(AB_FINANCE_DETAIL_PKG.PARTY_WISE_LEDGER(:GV_ORG_ID)) C   
+         WHERE
+                     TRUNC(TRANSCATION_DATE) BETWEEN NVL(TO_DATE(:P826_FROM_DATE,'DD-MON-YYYY'),TRUNC(TRANSCATION_DATE) ) 
+              AND NVL(TO_DATE(:P826_TO_DATE,'DD-MON-YYYY'),TRUNC(TRANSCATION_DATE))           
+        GROUP BY
+                ACCOUNT_ID,
+                ACCOUNT_TITLE--,TRANSCATION_DATE
+)
+   SELECT
+        SR,
+        PARTY_ID,
+        PARTY_NAME,
+        CITY,
+        RECOVERY_AMOUNT,
+       TRANSCATION_DATE
+
+   FROM(
+   SELECT
+            ROWNUM SR,
+            PN.PARTY_ID,
+            PN.PARTY_NAME,
+            CT.REG_CITY CITY,
+            NVL(RECEVIED_BEFORE_AMOUNT ,0) + NVL(RECEVIED_BETWEEN_AMOUNT,0) RECOVERY_AMOUNT,
+            RB.TRANSCATION_DATE
+   FROM
+              PARTY_NAME  PN
+    LEFT JOIN RECEVING_BEFORE REC ON REC.PARTY_ID=PN.PARTY_ID
+    LEFT JOIN RECEVING_BETWEEN RB ON RB.PARTY_ID=PN.PARTY_ID
+         JOIN AB_FIN_COA COA ON COA.COA_ID=PN.PARTY_ID
+    LEFT JOIN AB_SETUP_REGISTRATION CT ON CT.SR_ID=COA.SUB_ACCOUNT_TYPE    
+    WHERE
+       PN.PARTY_ID=NVL(:P826_PARTY_NAME,PN.PARTY_ID) 
+    ---ONLY THIS CITY LOV CLAUSE IS ADDED DOSENOT CHANGE IN UPPER QUERY 
+                AND (
+    :P826_CITY IS NULL
+    OR REGEXP_LIKE(:P826_CITY, '(^|,)' || CT.SR_ID || '(,|$)')
+    
+)
+   AND
+                       TRUNC(TRANSCATION_DATE) BETWEEN NVL(TO_DATE(:P826_FROM_DATE,'DD-MON-YYYY'),TRUNC(TRANSCATION_DATE) ) 
+            AND NVL(TO_DATE(:P826_TO_DATE,'DD-MON-YYYY'),TRUNC(TRANSCATION_DATE)) 
+   ORDER BY SR
+
+   )
+   WHERE
+        RECOVERY_AMOUNT<> 0
+        
+
+               ORDER BY SR ASC
+   
+    
+  ) LOOP
+
+  
+            
+
+
+    htp.p('<tr>' ||
+      
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.Sr || '</td>' ||  
+          
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.PARTY_NAME || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.CITY || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.RECOVERY_AMOUNT || '</td>' ||
+        --  '<td style="padding: 8px; border: 1px solid #ddd;">' || TO_CHAR(rec.TRANSCATION_DATE,'DD-MON-YYYY') || '</td>' ||  
+        
+         
+          '</tr>');
+             pur_qty := pur_qty + rec.RECOVERY_AMOUNT;
+            --   pur_amount := pur_amount + rec.TOTAL_AMOUNT;
+            --   pur_val := pur_val + rec.ESTIMATED_IN;
+            --   sale_amount := sale_amount + rec.SALE_OUT_AMOUNT;
+            --   sale_val := sale_val + rec.ESTIMATED_OUT;
+            --   bal := bal + rec.BALANCE;
+
+  
+   END LOOP;
+         htp.p('<tr style="border: 1px solid #ddd; font-weight: bold; background-color: #f8f8f8;">');
+  htp.p('<td colspan="3" style="padding: 8px; border: 1px solid #ddd; text-align: left;">Total:</td>');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' || TO_CHAR(pur_qty, '999G999G999G999G999G999G990') || '</td>');  -- Total Amanat Bags
+--    htp.p('<td colspan="1" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+--    htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' ||TO_CHAR(pur_amount, '999G999G999G999G999G999G990') || '</td>');  -- Total Freight Amount
+--    htp.p('<td colspan="1" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+--    htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' ||TO_CHAR(pur_val, '999G999G999G999G999G999G990') || '</td>');  -- Total Freight Amount
+ --  htp.p('<td colspan="1" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+--    htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' ||TO_CHAR(sale_amount, '999G999G999G999G999G999G990') || '</td>');  -- Total Freight Amount
+--    htp.p('<td colspan="1" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+--    htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' ||TO_CHAR(sale_val, '999G999G999G999G999G999G990') || '</td>');  -- Total Freight Amount
+--    htp.p('<td colspan="1" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+--    htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' ||TO_CHAR(bal, '999G999G999G999G999G999G990') || '</td>');  -- Total Freight Amount
+--    htp.p('<td colspan="2" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+          htp.p('</tr>');
+--           htp.p('<tr>');
+--           htp.p('</tr>');
+ --  htp.p('<td colspan="1" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+--   htp.p('<td colspan="2"></td>');
+  htp.p('</table>');
+
+
+ -- htp.p('</table>');
+ htp.p('</div>'); -- close all_reports
+END;
