@@ -1,0 +1,550 @@
+DECLARE
+  pur_qty NUMBER := 0;
+  pur_amount NUMBER := 0;
+  pur_val NUMBER := 0;
+  sale_amount NUMBER := 0;
+  sale_val NUMBER := 0;
+  bal NUMBER := 0;
+  sum_bal NUMBER := 0;
+  sum_qty NUMBER := 0;
+  v_last_payment_mode VARCHAR2(200) := NULL;
+  rec_PAYMENT_MODE  VARCHAR2(200) ;
+BEGIN
+    
+  -- JavaScript for printing and adjusting column widths
+ htp.p('<script>
+        function adjustColumnWidth() {
+          var table = document.querySelector("table");
+          var itemNameColumnIndex = 1; // Index for ITEM NAME column
+          var maxWidth = 0;
+          var rows = table.querySelectorAll("tbody tr");
+          
+          rows.forEach(function(row) {
+            var itemNameCell = row.cells[itemNameColumnIndex];
+            if (itemNameCell) {
+              var cellWidth = itemNameCell.scrollWidth;
+              if (cellWidth > maxWidth) {
+                maxWidth = cellWidth;
+              }
+            }
+          });
+          
+          var header = table.querySelector("thead th.item-name-column");
+          if (header) {
+            header.style.width = maxWidth + "px";
+          }
+          
+          var dataCells = table.querySelectorAll("tbody td.item-name-column");
+          dataCells.forEach(function(cell) {
+            cell.style.width = maxWidth + "px";
+          });
+        }
+       
+        function printDiv(printpage) {
+          adjustColumnWidth();
+          var headstr = "<html><head><title></title><style>";
+          headstr += "@page { size: A4 landscape; margin: 10mm; }";
+          headstr += "body { margin: 0; padding: 0; font-family: Arial, sans-serif; }";
+          headstr += ".button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }";
+          headstr += ".button1 { font-size: 16px; }";
+          headstr += ".summary { colspan: 4; }";
+          headstr += "table { border-collapse: collapse; width: 100%; margin: 0; padding: 0; }";
+          headstr += "th, td { text-align: left; padding: 3px; font-size: 10px; line-height: 1.1; }";
+          headstr += "th { background-color: rgba(146, 208, 80, 0.237); -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += ".separator { border-top: 1px solid black; }";
+          headstr += "h3 { margin: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(146, 208, 80); border: 1px solid black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += "@media print { thead {display: table-header-group;} tfoot {display: table-footer-group;} }";
+          headstr += "h2 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 0; text-align: center; }";
+          headstr += "#div_print1 { margin: 0; padding: 0; }";
+          headstr += "</style></head><body>";
+          var footstr = "</body></html>";
+          var newstr = document.getElementById(printpage).innerHTML;
+          var oldstr = document.body.innerHTML;
+          document.body.innerHTML = headstr + newstr + footstr;
+          window.print();
+          document.body.innerHTML = oldstr;
+          return false;
+        }
+      </script>');
+
+  -- Print buttons for both reports
+ -- htp.p('<button class="button" onclick="printDiv(''amanat_inward_report'')">Print Amanat Inward Report</button>');
+  htp.p('<button class="button" onclick="printDiv(''all_reports'')">Print Reports</button>');
+
+  -- Start merged report container
+  htp.p('<div id="all_reports">');
+
+  -- Daily Stock Report Section`
+  htp.p('<div class="header" style="display: flex; justify-content: space-between; margin-bottom: 20px; ">');
+  
+    htp.p('<h2 style="taxt-align: center; margin-top: 20px; ">IBRAHIM TRADERS</h2>');
+    htp.p('<img src="#APP_FILES#WhatsApp Image 2025-08-21 at 11.35.38 AM.jpeg" alt=""
+     style="max-width:100%; width:200px; height:auto;">');
+    htp.p('</div>');
+htp.p('
+<div style="font-family: Arial, sans-serif; font-size: 13px; padding: 6px; ">
+   <span style="margin-right: 30px;"><b>From Date:</b> '|| :P653_FROM_DATE ||'</span>
+   <span style="margin-right: 30px;"><b>To Date:</b> '|| :P653_TO_DATE ||'</span>
+   <span><b>Print Date:</b> '|| TO_CHAR(SYSDATE, 'DD-MON-YYYY') ||'</span>
+</div>');
+
+
+
+
+       htp.p('<h3 style="text-align:center;">National Level Trading Report</h3>');
+  
+  htp.p('<table>');
+  
+  
+htp.p('
+<tr style="padding: 8px; border: 1px solid #ddd;">
+    <th>DATE</th>
+    <th>INVOICE NO.</th>
+    <th>SUPPLIER</th>
+    <th>ITEM NAME</th>
+    <th>QTY</th>
+    <th>RATE</th>
+    <th>AMOUNT</th>
+    <th>PURCHASE FREIGHT</th>
+    <th>VALUE</th>
+    <th>CUSTOMER</th>
+    <th>RATE</th>
+    <th>AMOUNT</th>
+    <th>SALE FREIGHT</th>
+    <th>VALUE</th>
+    <th>P/L</th>
+    <th>PURCHASE OFFICER</th>
+    <th>SALE OFFICER</th>
+</tr>');
+
+ 
+
+  -- Cursor to fetch actual records — you must insert your real query here
+  FOR rec IN (
+         
+                   WITH LOV_DATE AS(
+                              SELECT
+                                    PO.PO_ID,
+                                    MAX(CASE WHEN SR.REG_TYPE = 'CUSTOMER REGISTRATION' AND SR.SR_ID = PO.CUSTOMER_ID THEN SR.REG_NAME END) AS PARTY_NAME,
+                                    MAX(CASE WHEN SR.REG_TYPE = 'COMPANY' AND SR.SR_ID = PO.COMPANY_ID THEN SR.REG_NAME END) AS COMPANY_NAME,
+                                    --MAX(CASE WHEN LD.DET_ID = PO.PO_TYPE THEN LD.LOOKUP_DET_NAME END) AS POO_TYPE,
+                                    MAX(CASE WHEN LD.DET_ID = PO.PAYMENT_MODE_ID THEN LD.LOOKUP_DET_NAME END) AS PAYMENT_MODE,
+                                    MAX(CASE WHEN LD.DET_ID = PO.FREIGHT_TYPE_ID THEN LD.LOOKUP_DET_NAME END) AS FREIGHT_TYPE,
+                                    MAX(CASE WHEN SR.REG_TYPE = 'VENDOR' AND SR.SR_ID = PO.VENDOR_ID THEN SR.PARTY_NAME END) AS VENDOR_NAME,
+                                     REG.FIRST_NAME||' '|| REG.LAST_NAME SALE_OFFICIER,
+                                     REG.USER_ID AS USER_ID,
+                                        TO_CHAR(PO.CREATED_ON, 'DD-MON-YYYY') AS CREATED_ON
+                              FROM
+                                              AB_PO_PURCHASE_ORDER PO
+                                     JOIN AB_PO_PURCHASE_ORDER_DET POD ON POD.PO_ID=PO.PO_ID
+                                         JOIN AB_LOOKUP_DETAIL LD
+                                         --ON LD.DET_ID = PO.PO_TYPE
+                                                                       ON LD.DET_ID = PO.FREIGHT_TYPE_ID
+                                                                       OR LD.DET_ID = PO.PAYMENT_MODE_ID
+                                LEFT JOIN AB_UM_USERS_REG REG          ON REG.USER_ID = PO.SALE_OFFICER_ID
+                                     JOIN AB_SETUP_REGISTRATION SR     ON SR.SR_ID = PO.VENDOR_ID
+                                                                       OR SR.SR_ID = PO.CUSTOMER_ID
+                                                                       OR SR.SR_ID = PO.COMPANY_ID
+               GROUP BY
+                            PO.PO_ID,
+                            REG.FIRST_NAME||' '|| REG.LAST_NAME,
+                            PO.CREATED_ON,USER_ID
+)
+        SELECT  distinct
+                --LD.PO_ID,
+                PO.PO_ID AS PO_ID,
+                 ITM.ITEM_ID,
+                 ITM.ITEM_CODE,
+                 ITM.ITEM_NAME||' ('|| ITM.PACKING_SIZE || ' '|| ITM.UNIT || ' '|| ITM.PACKING || ')' AS ITEM_NAME,
+                 
+                 POD.DET_ID DUMPING_DET,
+                 PO.LOADING_NAME,
+                 LD.PAYMENT_MODE,
+                 LD.FREIGHT_TYPE,
+                 PO.STATUS, 
+                 PO.REMARKS,
+                 LD.COMPANY_NAME,PO.FREIGHT_PARTY AS Purchase_Party,
+                 LD.PARTY_NAME,
+                 LD.USER_ID,
+                 LD.SALE_OFFICIER,
+                 PO.PURCHASING_TYPE,
+                 LD.VENDOR_NAME,
+                 TO_CHAR(PO.TRANSACTION_DATE, 'DD-MON-YYYY') AS TRANSACTION_DATE,
+                 TO_CHAR(NVL(POD.CHANGE_BAGS, 0), 'FM999G999G999G999G999G990') AS DUMPING_BAGS,
+                 TO_CHAR(NVL(POD.RATE, 0), 'FM999G999G999G999G999G990D00') AS RATE,
+                 NVL(POD.NET_AMOUNT, 0) AS TOTAL_AMOUNT,
+                  NVL(ALI.FREIGHT_AMOUNT,0) AS PURCHASE_FREIGHT_AMOUNT,
+                  NVL(ALI.FREIGHT_CHIT,0) AS   PURCHASE_FREIGHT_CHIT,
+                  NVL(ALI.FREIGHT_COMMISION,0) AS PURCHAS_FREIGHT_COMMISION,
+                  NVL(ALI.FREIGHT_TEH,0) AS PURCHASE_FREIGHT_TEHH,   ALI.DUMPING_STATUS , SOP.DUMPING_STATUS AS SALE_DUMPING_STATUS,
+                (NVL(POD.NET_AMOUNT, 0)) - ( NVL(ALI.FREIGHT_AMOUNT,0) + NVL(ALI.FREIGHT_CHIT,0) + NVL(ALI.FREIGHT_COMMISION,0)+ NVL(ALI.FREIGHT_TEH,0))  AS  ESTIMATED_IN,              
+                 INITCAP(PO.CREATED_BY) || ' (' || TO_CHAR(PO.CREATED_ON, 'DD-MON-YYYY') || ')' AS CREATED_BY,
+                 POD.REMARKS DET_REMARKS,
+                 ALI.LO_ID,
+                 CASE
+                   WHEN ALI.PO_ID != POD.PO_ID THEN NULL
+                       ELSE
+                           CASE
+                               WHEN COALESCE(REG.REG_NAME, ALI.VEHICLE_NO, ALI.BILTY_NO, ALI.DRIVER_NAME) IS NULL
+                               THEN NULL
+                           ELSE REG.REG_NAME || ', ' || ALI.VEHICLE_NO || ', ' || ALI.BILTY_NO || ', ' || ALI.DRIVER_NAME
+                   END
+                 END AS TRANSPORT_DETAILS ,
+                 SOP.SALE_BAGS AS SALE_OUT_BAGS ,
+                 SOP.SALE_BAG_RATE AS SALE_OUT_BAG_RATE ,
+                 SOP.TOTAL_AMOUNTSS AS SALE_OUT_AMOUNT  ,
+                 SOP.TRANSPORT_DETAILS AS SALE_OUT_TRANSPORT_DETAILS ,
+                 SOP.SALE_OFFICIER AS SALE_OUT_OFFICIER,
+                 SOP.USER_ID AS SALE_USER_ID,
+                 SOP.PARTY_NAME  AS SALE_OUT_PARTY ,
+                 SOP.PAYMENT_TERM AS PAYMENT_TERM ,
+                 SOP.SALE_FREIGHT_AMT,
+                 SOP.SALE_CHIT,    SOP.DUMPING_TYPE,
+                 SOP.SALE_COMMISION,
+                 SOP.SALE_FREIGHT_TEH, 
+                 SOP.ESTIMATED_OUT,SOP.FREIGHT_PARTY AS SALE_PARTY,
+                 SOP.PO_IDD,POD.PO_ID DUMPING_ID ,
+                NVL(SOP.ESTIMATED_OUT,0) - ((NVL(POD.NET_AMOUNT, 0)) - ( NVL(ALI.FREIGHT_AMOUNT,0) + NVL(ALI.FREIGHT_CHIT,0) + NVL(ALI.FREIGHT_COMMISION,0)+ NVL(ALI.FREIGHT_TEH,0))) AS BALANCE
+            -- (SOP.ESTIMATED_OUT) - (NVL(POD.NET_AMOUNT, 0)) - ( NVL(ALI.FREIGHT_AMOUNT,0) + NVL(ALI.FREIGHT_CHIT,0) + NVL(ALI.FREIGHT_COMMISION,0)+ NVL(ALI.FREIGHT_TEH,0))  AS BALANCE
+    
+        FROM
+                            AB_ITEMS_MASTER ITM
+                    LEFT JOIN AB_PO_PURCHASE_ORDER_DET POD ON POD.ITEM_ID=ITM.ITEM_ID
+                     LEFT JOIN AB_PO_PURCHASE_ORDER PO ON PO.PO_ID=POD.PO_ID  
+                LEFT JOIN AB_LOGISTICS_INFO ALI ON ALI.LO_IDS = POD.PO_ID
+                --LEFT JOIN AB_LOGISTICS_INFO LOD ON LOD.LO_IDS = ALI.LO_ID
+                LEFT JOIN AB_SETUP_REGISTRATION REG ON REG.SR_ID = ALI.TRANSPORT_NAME
+                LEFT JOIN LOV_DATE LD ON LD.PO_ID=PO.PO_ID
+ LEFT JOIN (
+WITH SETUP_REG AS(
+              SELECT
+                    SO.SO_ID, REG.USER_ID AS USER_ID,
+                    REG.FIRST_NAME||' '|| REG.LAST_NAME SALE_OFFICIER,
+                    MAX(CASE WHEN ASR.SR_ID=SO.CUSTOMER_ID THEN ASR.REG_NAME END) AS PARTY_NAME,
+                    MAX(CASE WHEN LD.DET_ID = SO.DELIVERY_STATUS THEN LD.LOOKUP_DET_NAME END) AS DELIVERY_STATUSS,
+                    MAX(CASE WHEN LD.DET_ID = SO.PAYMENT_ID THEN LD.LOOKUP_DET_NAME END) AS PAYMENT_TERM,
+                    MAX(CASE WHEN LD.DET_ID = SO.DUMPING_TYPE THEN LD.LOOKUP_DET_NAME END) AS DUMPING_TYPE
+        FROM
+                            AB_SO_ORDER_HEAD SO
+        LEFT JOIN AB_LOOKUP_DETAIL LD ON (LD.DET_ID = SO.DELIVERY_STATUS OR LD.DET_ID = SO.PAYMENT_ID OR LD.DET_ID = SO.DUMPING_TYPE)
+        LEFT JOIN AB_SETUP_REGISTRATION ASR ON (ASR.SR_ID=SO.CUSTOMER_ID)
+        LEFT JOIN AB_UM_USERS_REG REG ON REG.USER_ID = SO.SALE_OFFER_ID
+       
+        WHERE
+                      SO.SO_TYPE IN ('SOD', '645')
+            AND SO.ORG_ID = :GV_ORG_ID
+        GROUP BY
+            SO.SO_ID,
+            REG.FIRST_NAME||' '|| REG.LAST_NAME,USER_ID
+)
+    SELECT
+                SO.SO_ID,
+                SO.SO_IDS PO_ID,
+                SOD.SOD_IDS PO_IDD,
+                SR.USER_ID,
+                SR.SALE_OFFICIER,
+                SR.PARTY_NAME,
+                SR.DELIVERY_STATUSS,SO.FREIGHT_PARTY,
+                SR.PAYMENT_TERM,
+                 SOD.ITEM_ID,
+                TO_CHAR(SO.ORDER_DATE,'DD-MON-YYYY') ORDER_DATE,
+                SO.ORDER_STATUS,
+                CASE
+                      WHEN SO.STATUS = 'Y' THEN 'Cancel'
+                      ELSE NULL
+                END AS STATUS,
+                                 ALI.LO_ID,
+                CASE
+                   WHEN ALI.LO_IDS != SOD.SO_ID THEN NULL
+                       ELSE
+                           CASE
+                               WHEN COALESCE(REG.REG_NAME, ALI.VEHICLE_NO, ALI.BILTY_NO, ALI.DRIVER_NAME) IS NULL
+                               THEN NULL
+                           ELSE REG.REG_NAME || ', ' || ALI.VEHICLE_NO || ', ' || ALI.BILTY_NO || ', ' || ALI.DRIVER_NAME
+                   END
+                END AS TRANSPORT_DETAILS,
+                TO_CHAR(NVL(SOD.NO_BAGS, 0), 'FM999G999G999G999G999') AS SALE_BAGS,
+                TO_CHAR(NVL(SOD.BAG_RATE, 0), 'FM999G999G999G999G999G990D00') AS SALE_BAG_RATE,
+                NVL(SOD.TOTAL_AMOUNT, 0) AS TOTAL_AMOUNTSS,
+                INITCAP(SO.CREATED_BY ||' ('|| TO_CHAR(SO.CREATED_ON,'DD-MON-YYYY') ||')' ) AS CREATED_BY,
+                'PRINT' AS PRINT,ALI.DUMPING_STATUS ,
+               ( NVL(SOD.TOTAL_AMOUNT, 0)) - (NVL(ALI.FREIGHT_AMOUNT,0)+ NVL(ALI.FREIGHT_CHIT,0)+ NVL(ALI.FREIGHT_COMMISION,0) + NVL(ALI.FREIGHT_TEH,0)) AS ESTIMATED_OUT,
+                
+                nvl(ALI.FREIGHT_AMOUNT,0) AS SALE_FREIGHT_AMT,
+                NVL(ALI.FREIGHT_CHIT,0) AS SALE_CHIT,
+                NVL(ALI.FREIGHT_COMMISION,0) AS SALE_COMMISION,
+                NVL(ALI.FREIGHT_TEH,0)  AS SALE_FREIGHT_TEH,SR.DUMPING_TYPE
+    FROM
+                        AB_SO_ORDER_HEAD SO
+              JOIN  AB_SO_ORDER_DET SOD ON SOD.SO_ID=SO.SO_ID
+             JOIN  AB_ITEMS_MASTER ITM ON ITM.ITEM_ID=SOD.ITEM_ID
+              LEFT JOIN AB_LOGISTICS_INFO ALI ON ALI.LO_IDS = SOD.SO_ID
+             -- LEFT JOIN AB_LOGISTICS_INFO LOD ON LOD.LO_IDS = ALI.LO_ID
+                LEFT JOIN AB_SETUP_REGISTRATION REG ON REG.SR_ID = ALI.TRANSPORT_NAME
+           LEFT  JOIN  SETUP_REG SR ON SR.SO_ID=SO.SO_ID
+    WHERE
+                   SO.SO_TYPE IN ('SOD', '645')
+        AND  SO.ORG_ID = :GV_ORG_ID
+        AND  SO.ORDER_STATUS IN ('DUMPING','TRADING')
+        AND SOD.STATUS = 'Y'
+
+                  ORDER BY SO.CREATED_ON DESC                     )   SOP ON SOP.PO_IDD = POD.DET_ID
+                --    SOP ON SOP.PO_IDD = POD.PO_ID
+        WHERE
+                     PO_TYPE in ('DUMPING','642')
+                      and PO.PURCHASING_TYPE = 'TRADING'
+                    --    AND ALI.DUMPING_STATUS IS NOT NULL
+                   --  AND SOP.DUMPING_STATUS IS NOT NULL
+                     AND  PO.ORG_ID=:GV_ORG_ID
+                     AND POD.STATUS = 'Y'
+                              AND  (ITM.ITEM_ID IN ( SELECT REGEXP_SUBSTR(:P653_ITEM_NAME, '[^:]+', 1, LEVEL) FROM dual 
+                  CONNECT BY REGEXP_SUBSTR(:P653_ITEM_NAME, '[^:]+', 1, LEVEL) IS NOT NULL ) OR :P653_ITEM_NAME IS NULL)
+                  AND LD.USER_ID = NVL(:P653_PURCHAE_OFFICER,LD.USER_ID)
+                -- AND SOP.USER_ID = NVL(:P653_SALE_OFFICERE,LD.USER_ID)
+            AND  TRUNC(PO.TRANSACTION_DATE) BETWEEN NVL(TO_DATE(:P653_FROM_DATE, 'DD-MON-YYYY'),
+            TRUNC(PO.TRANSACTION_DATE)) AND NVL(TO_DATE(:P653_TO_DATE, 'DD-MON-YYYY'), TRUNC(PO.TRANSACTION_DATE))
+          
+    ORDER BY
+                PO.PO_ID  DESC
+    
+  ) LOOP
+
+  
+            
+
+
+    htp.p('<tr>' ||
+         
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.TRANSACTION_DATE || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.PO_ID || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.VENDOR_NAME || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.ITEM_NAME || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.DUMPING_BAGS || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.RATE || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.TOTAL_AMOUNT || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.PURCHASE_FREIGHT_AMOUNT || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.ESTIMATED_IN || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.SALE_OUT_PARTY || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.SALE_OUT_BAG_RATE || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.SALE_OUT_AMOUNT || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.SALE_FREIGHT_AMT || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.ESTIMATED_OUT || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.BALANCE || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.SALE_OFFICIER || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.SALE_OUT_OFFICIER || '</td>' ||
+         
+          '</tr>');
+             pur_qty := pur_qty + rec.DUMPING_BAGS;
+              pur_amount := pur_amount + rec.TOTAL_AMOUNT;
+              pur_val := pur_val + rec.ESTIMATED_IN;
+              sale_amount := sale_amount + rec.SALE_OUT_AMOUNT;
+              sale_val := sale_val + rec.ESTIMATED_OUT;
+              bal := bal + rec.BALANCE;
+
+  
+   END LOOP;
+          htp.p('<tr style="border: 1px solid #ddd; font-weight: bold; background-color: #f8f8f8;">');
+  htp.p('<td colspan="4" style="padding: 8px; border: 1px solid #ddd; text-align: left;">Total:</td>');
+  htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' || TO_CHAR(pur_qty, '999G999G999G999G999G999G990') || '</td>');  -- Total Amanat Bags
+   htp.p('<td colspan="1" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+   htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' ||TO_CHAR(pur_amount, '999G999G999G999G999G999G990') || '</td>');  -- Total Freight Amount
+   htp.p('<td colspan="1" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+   htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' ||TO_CHAR(pur_val, '999G999G999G999G999G999G990') || '</td>');  -- Total Freight Amount
+   htp.p('<td colspan="1" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+   htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' ||TO_CHAR(sale_amount, '999G999G999G999G999G999G990') || '</td>');  -- Total Freight Amount
+   htp.p('<td colspan="1" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+   htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' ||TO_CHAR(sale_val, '999G999G999G999G999G999G990') || '</td>');  -- Total Freight Amount
+   htp.p('<td colspan="1" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+   htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' ||TO_CHAR(bal, '999G999G999G999G999G999G990') || '</td>');  -- Total Freight Amount
+   htp.p('<td colspan="2" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+          htp.p('</tr>');
+          htp.p('<tr>');
+          htp.p('</tr>');
+ --  htp.p('<td colspan="1" style="text-align: right;"> </td>');  -- Empty Columns for spacing
+--   htp.p('<td colspan="2"></td>');
+  htp.p('</table>');
+
+
+
+
+
+
+       htp.p('<h3 class="summary" style="text-align:center;">Summary</h3>');
+  
+
+  htp.p('<table>');
+  
+htp.p('
+<tr style="padding: 8px; border: 1px solid #ddd;">
+    <th>Purchase Officer</th>
+    <th>Sale Officer</th>
+    <th>qty</th>
+    <th>P/L</th>
+    
+</tr>');
+
+
+
+
+for x in (
+
+    WITH LOV_DATE AS (
+    SELECT
+        PO.PO_ID,
+        MAX(CASE WHEN SR.REG_TYPE = 'CUSTOMER REGISTRATION' AND SR.SR_ID = PO.CUSTOMER_ID THEN SR.REG_NAME END) AS PARTY_NAME,
+        MAX(CASE WHEN SR.REG_TYPE = 'COMPANY' AND SR.SR_ID = PO.COMPANY_ID THEN SR.REG_NAME END) AS COMPANY_NAME,
+        MAX(CASE WHEN LD.DET_ID = PO.PAYMENT_MODE_ID THEN LD.LOOKUP_DET_NAME END) AS PAYMENT_MODE,
+        MAX(CASE WHEN LD.DET_ID = PO.FREIGHT_TYPE_ID THEN LD.LOOKUP_DET_NAME END) AS FREIGHT_TYPE,
+        MAX(CASE WHEN SR.REG_TYPE = 'VENDOR' AND SR.SR_ID = PO.VENDOR_ID THEN SR.PARTY_NAME END) AS VENDOR_NAME,
+        REG.FIRST_NAME || ' ' || REG.LAST_NAME AS SALE_OFFICIER,
+        REG.USER_ID AS USER_ID,
+        TO_CHAR(PO.CREATED_ON, 'DD-MON-YYYY') AS CREATED_ON
+    FROM AB_PO_PURCHASE_ORDER PO
+    JOIN AB_PO_PURCHASE_ORDER_DET POD ON POD.PO_ID = PO.PO_ID
+    JOIN AB_LOOKUP_DETAIL LD
+         ON LD.DET_ID = PO.FREIGHT_TYPE_ID
+         OR LD.DET_ID = PO.PAYMENT_MODE_ID
+    LEFT JOIN AB_UM_USERS_REG REG  ON REG.USER_ID = PO.SALE_OFFICER_ID
+    JOIN AB_SETUP_REGISTRATION SR ON SR.SR_ID = PO.VENDOR_ID
+                                  OR SR.SR_ID = PO.CUSTOMER_ID
+                                  OR SR.SR_ID = PO.COMPANY_ID
+    GROUP BY PO.PO_ID, REG.FIRST_NAME || ' ' || REG.LAST_NAME, PO.CREATED_ON, USER_ID
+),
+/* move nested WITHs to top-level to avoid ORA-32034 */
+SETUP_REG AS (
+    SELECT
+        SO.SO_ID,
+        REG.USER_ID AS USER_ID,
+        REG.FIRST_NAME || ' ' || REG.LAST_NAME AS SALE_OFFICIER,
+        MAX(CASE WHEN ASR.SR_ID = SO.CUSTOMER_ID THEN ASR.REG_NAME END) AS PARTY_NAME,
+        MAX(CASE WHEN LD.DET_ID = SO.DELIVERY_STATUS THEN LD.LOOKUP_DET_NAME END) AS DELIVERY_STATUSS,
+        MAX(CASE WHEN LD.DET_ID = SO.PAYMENT_ID THEN LD.LOOKUP_DET_NAME END) AS PAYMENT_TERM,
+        MAX(CASE WHEN LD.DET_ID = SO.DUMPING_TYPE THEN LD.LOOKUP_DET_NAME END) AS DUMPING_TYPE
+    FROM AB_SO_ORDER_HEAD SO
+    LEFT JOIN AB_LOOKUP_DETAIL LD
+      ON (LD.DET_ID = SO.DELIVERY_STATUS OR LD.DET_ID = SO.PAYMENT_ID OR LD.DET_ID = SO.DUMPING_TYPE)
+    LEFT JOIN AB_SETUP_REGISTRATION ASR ON ASR.SR_ID = SO.CUSTOMER_ID
+    LEFT JOIN AB_UM_USERS_REG REG       ON REG.USER_ID = SO.SALE_OFFER_ID
+    WHERE SO.SO_TYPE IN ('SOD','645')
+      AND SO.ORG_ID = :GV_ORG_ID
+    GROUP BY SO.SO_ID, REG.FIRST_NAME || ' ' || REG.LAST_NAME, REG.USER_ID
+),
+SOP AS (
+    SELECT
+        SO.SO_ID,
+        SO.SO_IDS PO_ID,
+        SOD.SOD_IDS PO_IDD,
+        SR.USER_ID,
+        SR.SALE_OFFICIER,
+        SR.PARTY_NAME,
+        SR.DELIVERY_STATUSS,
+        SO.FREIGHT_PARTY,
+        SR.PAYMENT_TERM,
+        SOD.ITEM_ID,
+        TO_CHAR(SO.ORDER_DATE,'DD-MON-YYYY') ORDER_DATE,
+        SO.ORDER_STATUS,
+        CASE WHEN SO.STATUS = 'Y' THEN 'Cancel' ELSE NULL END AS STATUS,
+        ALI.LO_ID,
+        CASE
+          WHEN ALI.LO_IDS != SOD.SO_ID THEN NULL
+          ELSE CASE
+            WHEN COALESCE(REG.REG_NAME, ALI.VEHICLE_NO, ALI.BILTY_NO, ALI.DRIVER_NAME) IS NULL
+            THEN NULL
+            ELSE REG.REG_NAME || ', ' || ALI.VEHICLE_NO || ', ' || ALI.BILTY_NO || ', ' || ALI.DRIVER_NAME
+          END
+        END AS TRANSPORT_DETAILS,
+        TO_CHAR(NVL(SOD.NO_BAGS, 0), 'FM999G999G999G999G999') AS SALE_BAGS,
+        TO_CHAR(NVL(SOD.BAG_RATE, 0), 'FM999G999G999G999G990D00') AS SALE_BAG_RATE,
+        NVL(SOD.TOTAL_AMOUNT, 0) AS TOTAL_AMOUNTSS,
+        INITCAP(SO.CREATED_BY || ' (' || TO_CHAR(SO.CREATED_ON,'DD-MON-YYYY') || ')') AS CREATED_BY,
+        'PRINT' AS PRINT,
+        ALI.DUMPING_STATUS,
+        ( NVL(SOD.TOTAL_AMOUNT, 0)
+          - ( NVL(ALI.FREIGHT_AMOUNT,0)
+            + NVL(ALI.FREIGHT_CHIT,0)
+            + NVL(ALI.FREIGHT_COMMISION,0)
+            + NVL(ALI.FREIGHT_TEH,0) ) ) AS ESTIMATED_OUT,
+        NVL(ALI.FREIGHT_AMOUNT,0)    AS SALE_FREIGHT_AMT,
+        NVL(ALI.FREIGHT_CHIT,0)      AS SALE_CHIT,
+        NVL(ALI.FREIGHT_COMMISION,0) AS SALE_COMMISION,
+        NVL(ALI.FREIGHT_TEH,0)       AS SALE_FREIGHT_TEH,
+        SR.DUMPING_TYPE
+    FROM AB_SO_ORDER_HEAD SO
+    JOIN AB_SO_ORDER_DET SOD         ON SOD.SO_ID = SO.SO_ID
+    JOIN AB_ITEMS_MASTER ITM2        ON ITM2.ITEM_ID = SOD.ITEM_ID
+    LEFT JOIN AB_LOGISTICS_INFO ALI  ON ALI.LO_IDS = SOD.SO_ID
+    LEFT JOIN AB_SETUP_REGISTRATION REG ON REG.SR_ID = ALI.TRANSPORT_NAME
+    LEFT JOIN SETUP_REG SR ON SR.SO_ID = SO.SO_ID
+    WHERE SO.SO_TYPE IN ('SOD','645')
+      AND SO.ORG_ID = :GV_ORG_ID
+      AND SO.ORDER_STATUS IN ('DUMPING','TRADING')
+      AND SOD.STATUS = 'Y'
+),
+MAIN_DETAIL AS (
+    SELECT
+        LD.SALE_OFFICIER,
+        SOP.SALE_OFFICIER AS SALE_OUT_OFFICIER,
+        NVL(POD.CHANGE_BAGS, 0) AS DUMPING_BAGS,
+        NVL(SOP.ESTIMATED_OUT, 0)
+          - ( NVL(POD.NET_AMOUNT, 0)
+              - ( NVL(ALI.FREIGHT_AMOUNT, 0)
+                + NVL(ALI.FREIGHT_CHIT, 0)
+                + NVL(ALI.FREIGHT_COMMISION, 0)
+                + NVL(ALI.FREIGHT_TEH, 0) ) ) AS BALANCE
+    FROM AB_ITEMS_MASTER ITM
+    LEFT JOIN AB_PO_PURCHASE_ORDER_DET POD ON POD.ITEM_ID = ITM.ITEM_ID
+    LEFT JOIN AB_PO_PURCHASE_ORDER PO      ON PO.PO_ID   = POD.PO_ID
+    LEFT JOIN AB_LOGISTICS_INFO ALI        ON ALI.LO_IDS = POD.PO_ID
+    LEFT JOIN LOV_DATE LD                  ON LD.PO_ID   = PO.PO_ID
+    LEFT JOIN SOP                          ON SOP.PO_IDD = POD.DET_ID
+    WHERE PO.PO_TYPE IN ('DUMPING','642')
+      AND PO.PURCHASING_TYPE = 'TRADING'
+      AND PO.ORG_ID = :GV_ORG_ID
+      AND POD.STATUS = 'Y'
+      AND ( ITM.ITEM_ID IN (
+            SELECT REGEXP_SUBSTR(:P653_ITEM_NAME, '[^:]+', 1, LEVEL)
+            FROM dual
+            CONNECT BY REGEXP_SUBSTR(:P653_ITEM_NAME, '[^:]+', 1, LEVEL) IS NOT NULL
+          ) OR :P653_ITEM_NAME IS NULL )
+      AND LD.USER_ID = NVL(:P653_PURCHAE_OFFICER, LD.USER_ID)
+      AND TRUNC(PO.TRANSACTION_DATE) BETWEEN
+          NVL(TO_DATE(:P653_FROM_DATE, 'DD-MON-YYYY'), TRUNC(PO.TRANSACTION_DATE))
+      AND NVL(TO_DATE(:P653_TO_DATE, 'DD-MON-YYYY'), TRUNC(PO.TRANSACTION_DATE))
+)
+SELECT
+    SALE_OFFICIER,
+    SALE_OUT_OFFICIER,
+    SUM(DUMPING_BAGS) AS TOTAL_DUMPING_BAGS,
+    SUM(BALANCE)      AS TOTAL_BALANCE
+FROM MAIN_DETAIL
+GROUP BY SALE_OFFICIER, SALE_OUT_OFFICIER
+ORDER BY SALE_OFFICIER, SALE_OUT_OFFICIER
+
+) LOOP
+
+
+
+    htp.p('<tr>' ||
+         
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || x.SALE_OFFICIER || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || x.SALE_OUT_OFFICIER || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || x.TOTAL_DUMPING_BAGS || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || x.TOTAL_BALANCE || '</td>' ||
+          '</tr>');
+
+              sum_qty := sum_qty + x.TOTAL_DUMPING_BAGS;
+              sum_bal := sum_bal + x.TOTAL_BALANCE;
+    END LOOP;
+
+        htp.p('<tr style="border: 1px solid #ddd; font-weight: bold; background-color: #f8f8f8;">');
+        htp.p('<td colspan="2" style="padding: 8px; border: 1px solid #ddd; text-align: left;">Total:</td>');
+        htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' ||TO_CHAR(sum_qty, '999G999G999G999G999G999G990') || '</td>');  -- Total Freight Amount
+        htp.p('<td style="padding: 8px; border: 1px solid #ddd;">' ||TO_CHAR(sum_bal, '999G999G999G999G999G999G990') || '</td>');  -- Total Freight Amount
+
+      
+          htp.p('</tr>');
+
+
+  htp.p('</table>');
+  htp.p('</div>'); -- close all_reports
+END;
