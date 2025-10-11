@@ -89,25 +89,17 @@ htp.p('
    <span style="margin-left: 360px;"><b>Printed By:</b> '|| :APP_USER  ||'</span>
 </div>');
 
-
-
-
        htp.p('<h3 style="text-align:center;">Recovery Sheet</h3>');
   
   htp.p('<table>');
-  
-  
 htp.p('
 <tr style="padding: 8px; border: 1px solid #ddd;">
     <th>Sr</th>
-   
     <th>PARTY NAME</th>
     <th>CITY</th>
     <th>RECOVERY AMOUNT</th>
    
 </tr>');
-
- 
 
   -- Cursor to fetch actual records — you must insert your real query here
   FOR rec IN (
