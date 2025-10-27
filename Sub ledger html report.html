@@ -1,0 +1,204 @@
+DECLARE
+  v_tax_liability NUMBER := 0;
+  v_inv_net_amount NUMBER := 0;
+  v_inv_bags NUMBER := 0;
+  v_cprn_payments NUMBER := 0;
+  v_emp_name   varchar2(200);
+BEGIN
+
+          -- Fetch employee name using P855_EMP_CODE
+          BEGIN
+    SELECT NVL(NAME,NULL)
+    INTO v_emp_name
+    FROM HR_EMPLOYEE_REGISTRATION
+    WHERE HRMIS_CODE = :P855_EMP_CODE
+    AND ROWNUM = 1;
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      v_emp_name := NULL;
+  END;
+  -- JavaScript for printing and adjusting column widths
+ htp.p('<script>
+        function adjustColumnWidth() {
+          var table = document.querySelector("table");
+          var itemNameColumnIndex = 1; // Index for ITEM NAME column
+          var maxWidth = 0;
+          var rows = table.querySelectorAll("tbody tr");
+          
+          rows.forEach(function(row) {
+            var itemNameCell = row.cells[itemNameColumnIndex];
+            if (itemNameCell) {
+              var cellWidth = itemNameCell.scrollWidth;
+              if (cellWidth > maxWidth) {
+                maxWidth = cellWidth;
+              }
+            }
+          });
+          
+          var header = table.querySelector("thead th.item-name-column");
+          if (header) {
+            header.style.width = maxWidth + "px";
+          }
+          
+          var dataCells = table.querySelectorAll("tbody td.item-name-column");
+          dataCells.forEach(function(cell) {
+            cell.style.width = maxWidth + "px";
+          });
+        }
+       
+        function printDiv(printpage) {
+          adjustColumnWidth();
+          var headstr = "<html><head><title></title><style>";
+          headstr += "@page { size: A4 landscape; margin: 10mm; }";
+          headstr += "body { margin: 0; padding: 0; font-family: Arial, sans-serif; }";
+          headstr += ".button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }";
+          headstr += ".button1 { font-size: 16px; }";
+          headstr += "table { border-collapse: collapse; width: 100%; margin: 0; padding: 0; }";
+          headstr += "th, td { text-align: left; padding: 3px; font-size: 10px; line-height: 1.1; }";
+          headstr += "th { background-color: rgba(146, 208, 80, 0.237); -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += ".separator { border-top: 1px solid black; }";
+          headstr += "h3 { margin: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(146, 208, 80); border: 1px solid black; -webkit-print-color-adjust: exact; print-color-adjust: exact; }";
+          headstr += "@media print { thead {display: table-header-group;} tfoot {display: table-footer-group;} }";
+          headstr += "h2 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 0; text-align: center; }";
+          headstr += "#div_print1 { margin: 0; padding: 0; }";
+          headstr += "</style></head><body>";
+          var footstr = "</body></html>";
+          var newstr = document.getElementById(printpage).innerHTML;
+          var oldstr = document.body.innerHTML;
+          document.body.innerHTML = headstr + newstr + footstr;
+          window.print();
+          document.body.innerHTML = oldstr;
+          return false;
+        }
+      </script>');
+
+  -- Print buttons for both reports
+ -- htp.p('<button class="button" onclick="printDiv(''amanat_inward_report'')">Print Amanat Inward Report</button>');
+  htp.p('<button class="button" onclick="printDiv(''all_reports'')">Print Reports</button>');
+
+  -- Start merged report container
+  htp.p('<div id="all_reports">');
+
+ -- Name and logo design
+
+
+htp.p('<div class="header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">');
+htp.p('<h2 style="margin: 0; font-size: 20px;">IBRAHIM TRADERS</h2>');
+htp.p('<img src="#APP_FILES#WhatsApp Image 2025-08-21 at 11.35.38 AM.jpeg" alt="Logo" style="height: 40px; width: auto; object-fit: contain;">');
+htp.p('</div>');
+
+  htp.p('
+<div style="font-family: Arial, sans-serif; font-size: 13px; padding: 6px; ">
+   <span style="margin-right: 30px;"><b>Emp Code & Name:</b> '|| :P855_EMP_CODE || ' - ' || v_emp_name ||'</span>
+   <span style="margin-right: 30px;"><b>Sub Department:</b> '|| :P855_SUB_DEPARTMENT ||'</span>
+   
+</div>');
+
+  htp.p('<h3>Sub JV Salary</h3>');
+  htp.p('<table>');
+
+
+htp.p('<tr style="padding: 8px; text-align: center; vertical-align: middle; border: 1px solid #ddd;"> 
+<th style="text-align:center;">EMP CODE</th>
+<th style="text-align:center;" >EMP NAME</th>
+<th style="text-align:center;" >SUB DEPARTMENT</th>
+<th style="text-align:center;" >BALANCED DEBIT</th>
+<th style="text-align:center;">BALANCED CREDIT</th>
+<th style="text-align:center;">BALANCE</th>
+</tr>');
+
+  -- Cursor to fetch actual records — you must insert your real query here
+  FOR rec IN (
+        WITH emp_code AS (
+    SELECT  
+        NAME AS EMP_NAME,
+        HRMIS_CODE,
+        EMP_ID,
+        SUB_DEPARTMENT
+    FROM HR_EMPLOYEE_REGISTRATION
+),
+detail_data AS (
+    SELECT 
+        ASR.HRMIS_CODE,
+        NVL(SUM(AFTD.DR_AMOUNT),0) AS TOTAL_DEBIT_AMOUNT,
+        NVL(SUM(AFTD.CR_AMOUNT),0) AS TOTAL_CREDIT_AMOUNT,
+        NVL(SUM(AFTD.DR_AMOUNT), 0) - NVL(SUM(AFTD.CR_AMOUNT), 0) AS BALANCE
+    FROM AB_FIN_TRANSACTION AFT
+    JOIN AB_FIN_TRANSACTION_DET AFTD 
+        ON AFTD.TR_ID = AFT.TR_ID
+    LEFT JOIN emp_code ASR 
+        ON ASR.EMP_ID = NVL(AFTD.EMPLOYEE_REGISTRATION_ID, AFTD.HR_EMP_IDD)
+    LEFT JOIN AB_LOOKUP_DETAIL ADL 
+        ON ADL.DET_ID = NVL(AFTD.SALARY_ACCOUNT_ID, AFTD.ACCOUNT_TYPE_ID)
+    WHERE AFT.TR_TYPE IN (801,635,628)
+      AND AFTD.TRD_TYPE IN (801,635,628)
+      AND AFT.org_id = :GV_ORG_ID
+      AND ASR.HRMIS_CODE IS NOT NULL
+      AND ASR.HRMIS_CODE = NVL(:P855_EMP_CODE, ASR.HRMIS_CODE)
+
+      -- ✅ FIX: handle multiple sub-departments properly
+      AND (
+          :P855_SUB_DEPARTMENT IS NULL
+          OR ASR.SUB_DEPARTMENT IN (
+              SELECT TRIM(REGEXP_SUBSTR(:P855_SUB_DEPARTMENT, '[^:]+', 1, LEVEL))
+              FROM dual
+              CONNECT BY REGEXP_SUBSTR(:P855_SUB_DEPARTMENT, '[^:]+', 1, LEVEL) IS NOT NULL
+          )
+      )
+
+      AND (
+          :P855_SUB_ACC_TYPE IS NULL
+          OR ADL.DET_ID IN (
+              SELECT REGEXP_SUBSTR(:P855_SUB_ACC_TYPE, '[^:]+', 1, LEVEL)
+              FROM dual 
+              CONNECT BY REGEXP_SUBSTR(:P855_SUB_ACC_TYPE, '[^:]+', 1, LEVEL) IS NOT NULL
+          )
+      )
+    GROUP BY ASR.HRMIS_CODE
+)
+SELECT
+    ASR.EMP_ID,
+    ASR.HRMIS_CODE AS HRMIS_CODE,
+    ASR.EMP_NAME AS EMP_NAME,
+    ASR.SUB_DEPARTMENT AS SUB_DEPARTMENT,
+    NVL(DD.TOTAL_DEBIT_AMOUNT,0) AS BALANCED_DEBIT,
+    NVL(DD.TOTAL_CREDIT_AMOUNT,0) AS BALANCED_CREDIT,
+    NVL(DD.BALANCE,0) AS BALANCE,
+    'DETAIL' AS DETAIL
+FROM emp_code ASR
+LEFT JOIN detail_data DD 
+    ON DD.HRMIS_CODE = ASR.HRMIS_CODE
+
+-- ✅ Keep same logic at outer level too
+WHERE (
+    :P855_SUB_DEPARTMENT IS NULL
+    OR ASR.SUB_DEPARTMENT IN (
+        SELECT TRIM(REGEXP_SUBSTR(:P855_SUB_DEPARTMENT, '[^:]+', 1, LEVEL))
+        FROM dual
+        CONNECT BY REGEXP_SUBSTR(:P855_SUB_DEPARTMENT, '[^:]+', 1, LEVEL) IS NOT NULL
+    )
+)
+AND ASR.HRMIS_CODE = NVL(:P855_EMP_CODE, ASR.HRMIS_CODE)
+ORDER BY ASR.HRMIS_CODE
+
+
+  ) LOOP
+    htp.p('<tr>' ||
+        
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.HRMIS_CODE || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.EMP_NAME || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.SUB_DEPARTMENT || '</td>' ||
+          '<td style="padding: 8px; text-align: right; border: 1px solid #ddd;">' || to_char(rec.BALANCED_DEBIT,'999G999G999G999G990D00') || '</td>' ||
+          '<td style="padding: 8px; text-align: right; border: 1px solid #ddd;">' || to_char(rec.BALANCED_CREDIT,'999G999G999G999G990D00') || '</td>' ||
+          '<td style="padding: 8px; text-align: right; border: 1px solid #ddd;">' || to_char(rec.BALANCE,'999G999G999G999G990D00') || '</td>' ||
+         
+          '</tr>');
+
+  
+  END LOOP;
+
+  
+
+  htp.p('</table>');
+  htp.p('</div>'); -- close all_reports
+END;
