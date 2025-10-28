@@ -751,9 +751,10 @@ END IF;
           '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.VOUCHER_NAME || '</td>' ||
             '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.ACCOUNT_TITLE || '</td>' ||
             '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.NARRATIONS || '</td>' ||
-           '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.DR_AMOUNT || '</td>' ||
-          '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.CR_AMOUNT || '</td>' ||
-           '<td style="padding: 8px; border: 1px solid #ddd;">' || rec.CLOSING_BALANCE || '</td>' ||
+                  '<td style="padding: 8px; border: 1px solid #ddd; text-align: right;">' || TO_CHAR(rec.DR_AMOUNT,'999G999G999G999G999G999G990') || '</td>' ||
+          '<td style="padding: 8px; border: 1px solid #ddd; text-align: right; ">' || TO_CHAR(rec.CR_AMOUNT,'999G999G999G999G999G999G990') || '</td>' ||
+           '<td style="padding: 8px; border: 1px solid #ddd; text-align: right;">' || TO_CHAR(rec.CLOSING_BALANCE,'999G999G999G999G999G999G990') || '</td>' ||
+         
          
           '</tr>');
 
